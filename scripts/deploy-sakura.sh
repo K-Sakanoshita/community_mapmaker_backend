@@ -68,6 +68,7 @@ for dir in api auth admin lib; do
     cp -R "$REPO_ROOT/$dir" "$PUBLIC_DIR/$dir"
 done
 cp "$REPO_ROOT/bootstrap.php" "$PUBLIC_DIR/bootstrap.php"
+cp "$REPO_ROOT/reset-password.html" "$PUBLIC_DIR/reset-password.html"
 
 rm -rf "$PUBLIC_DIR/config"
 mkdir -p "$PUBLIC_DIR/config"
@@ -105,5 +106,5 @@ find "$PUBLIC_DIR" -type f -name '*.php' -exec chmod 755 {} \;
 
 echo "Deployed to: $PUBLIC_DIR"
 echo "Private config: $CONFIG_FILE"
-echo "Public endpoints: admin/ api/ auth/"
+echo "Public endpoints: admin/ api/ auth/ reset-password.html"
 echo "bootstrap.php, lib/, and config/ are blocked from direct HTTP access."

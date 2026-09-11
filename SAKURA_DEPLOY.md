@@ -17,6 +17,7 @@
 │   ├── migrations/
 │   ├── scripts/
 │   ├── bootstrap.php
+│   ├── reset-password.html
 │   └── schema.sql
 └── www/
     └── community-mapmaker-backend/      # Web 公開側
@@ -24,6 +25,7 @@
         ├── admin/
         ├── api/
         ├── auth/
+        ├── reset-password.html          # メールから開くパスワード再設定画面
         ├── bootstrap.php                # PHP include 用。HTTP 直接アクセスは禁止
         ├── config/
         │   ├── .htaccess
@@ -60,6 +62,14 @@ vi config/config.php
 - `mail.from_address`
 - `mail.from_name`
 
+`auth.password_reset_url` は、同梱の `reset-password.html` の公開 URL を指定します。既定の配置先なら次の形式です。
+
+```php
+'password_reset_url' => 'https://YOUR_HOST/community-mapmaker-backend/reset-password.html',
+```
+
+メールに記載される URL にはバックエンドが `?token=...` を自動で付加します。`reset-password.html` はその token を読み取り、同じ配置先の `auth/reset-password.php` へ新しいパスワードを POST します。
+
 ランダムな Rate Limit secret は次のように生成できます。
 
 ```sh
@@ -84,6 +94,7 @@ chmod +x scripts/deploy-sakura.sh
 ## deploy-sakura.sh が行うこと
 
 - `admin/`、`api/`、`auth/` を公開側へコピー
+- `reset-password.html` を公開側へコピー
 - PHP 実行に必要な `bootstrap.php` と `lib/` を公開側へコピー
 - `config/config.php` の実体は Git 作業ツリー側に残す
 - 公開側には、非公開側の `config/config.php` を `require` するだけのブリッジを生成
@@ -118,7 +129,7 @@ git pull
 ./scripts/deploy-sakura.sh "$HOME/www/community-mapmaker-backend"
 ```
 
-`admin/`、`api/`、`auth/`、`lib/` は毎回入れ替えるため、削除済みファイルが公開側に残りません。`config/config.php` の実体は非公開側にあるため、再配置で上書きされません。
+`admin/`、`api/`、`auth/`、`lib/` は毎回入れ替えるため、削除済みファイルが公開側に残りません。`reset-password.html` も再配置されます。`config/config.php` の実体は非公開側にあるため、再配置で上書きされません。
 
 ## 動作確認
 
@@ -127,7 +138,10 @@ git pull
 ```text
 https://YOUR_HOST/community-mapmaker-backend/admin/
 https://YOUR_HOST/community-mapmaker-backend/api/activities.php?app=playgrounds
+https://YOUR_HOST/community-mapmaker-backend/reset-password.html
 ```
+
+`reset-password.html` を token なしで直接開いた場合は、無効な URL である旨を表示します。通常はパスワード再設定メールのリンクから開いてください。
 
 次の URL は HTTP 403 になることを確認してください。
 
