@@ -17,25 +17,117 @@ final class Http
 
         $origin = (string)($_SERVER['HTTP_ORIGIN'] ?? '');
         $allowed = array_values(array_filter(array_map('strval', $authConfig['allowed_origins'] ?? [])));
-        if ($origin !== '' && in_array($origin, $allowed, true)) {
+
+        $originAllowed = $origin === ''
+            || in_array($origin, $allowed, true)
+            || (
+                ($authConfig['allow_private_network_origins'] ?? false) === true
+                && self::isPrivateNetworkOrigin(
+                    $origin,
+                    (array)($authConfig['allowed_origin_hosts'] ?? [])
+                )
+            );
+
+        if ($origin !== '' && $originAllowed) {
             header('Access-Control-Allow-Origin: ' . $origin);
             header('Vary: Origin');
-            header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-            header('Access-Control-Allow-Headers: Content-Type');
+            header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
+            header('Access-Control-Allow-Headers: Content-Type, Authorization');
             header('Access-Control-Max-Age: 600');
         }
 
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
-            if ($origin !== '' && !in_array($origin, $allowed, true)) {
+            if (!$originAllowed) {
                 self::respond(403, ['status' => 'error', 'code' => 'origin_not_allowed']);
             }
             http_response_code(204);
             exit;
         }
 
-        if ($origin !== '' && !in_array($origin, $allowed, true)) {
+        if (!$originAllowed) {
             self::respond(403, ['status' => 'error', 'code' => 'origin_not_allowed']);
         }
+    }
+
+    private static function isPrivateNetworkOrigin(string $origin, array $allowedHosts): bool
+    {
+        if ($origin === '') {
+            return true;
+        }
+
+        $parts = parse_url($origin);
+        if (!is_array($parts)) {
+            return false;
+        }
+
+        $scheme = strtolower((string)($parts['scheme'] ?? ''));
+        $host = strtolower((string)($parts['host'] ?? ''));
+
+        if (!in_array($scheme, ['http', 'https'], true) || $host === '') {
+            return false;
+        }
+
+        // An Origin must not contain user-info, path, query, or fragment.
+        if (
+            isset($parts['user'])
+            || isset($parts['pass'])
+            || isset($parts['path'])
+            || isset($parts['query'])
+            || isset($parts['fragment'])
+        ) {
+            return false;
+        }
+
+        foreach ($allowedHosts as $allowedHost) {
+            $allowedHost = strtolower(rtrim(trim((string)$allowedHost), '.'));
+            if ($allowedHost !== '' && rtrim($host, '.') === $allowedHost) {
+                return true;
+            }
+        }
+
+        if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
+            $octets = array_map('intval', explode('.', $host));
+            [$a, $b] = $octets;
+
+            // Loopback: 127.0.0.0/8
+            if ($a === 127) {
+                return true;
+            }
+
+            // RFC1918: 10.0.0.0/8
+            if ($a === 10) {
+                return true;
+            }
+
+            // RFC1918: 172.16.0.0/12
+            if ($a === 172 && $b >= 16 && $b <= 31) {
+                return true;
+            }
+
+            // RFC1918: 192.168.0.0/16
+            if ($a === 192 && $b === 168) {
+                return true;
+            }
+
+            // Shared address space / Tailscale IPv4: 100.64.0.0/10
+            if ($a === 100 && $b >= 64 && $b <= 127) {
+                return true;
+            }
+
+            return false;
+        }
+
+        // IPv6 loopback.
+        if ($host === '::1') {
+            return true;
+        }
+
+        /*
+         * Tailscale also supports IPv6, but this local stack currently discovers
+         * and advertises its Tailscale IPv4 address. Exact Tailscale DNS names
+         * remain permitted through allowed_origin_hosts.
+         */
+        return false;
     }
 
     public static function requireMethod(string $method): void
@@ -45,6 +137,61 @@ final class Http
             self::respond(405, ['status' => 'error', 'code' => 'method_not_allowed']);
         }
     }
+
+
+    public static function requireMethods(array|string $methods, string ...$moreMethods): string
+    {
+        if (is_array($methods)) {
+            $allowed = $methods;
+        } else {
+            $allowed = array_merge([$methods], $moreMethods);
+        }
+
+        $allowed = array_values(array_unique(array_map(
+            static fn ($method): string => strtoupper((string)$method),
+                                                       $allowed
+        )));
+
+        $requestMethod = strtoupper(
+            (string)($_SERVER['REQUEST_METHOD'] ?? 'GET')
+        );
+
+        if (!in_array($requestMethod, $allowed, true)) {
+            header('Allow: ' . implode(', ', $allowed));
+            self::respond(405, [
+                'status' => 'error',
+                'code' => 'method_not_allowed',
+            ]);
+        }
+
+        return $requestMethod;
+    }
+
+    public static function basicCredentials(): ?array
+    {
+        $user = $_SERVER['PHP_AUTH_USER'] ?? null;
+        $password = $_SERVER['PHP_AUTH_PW'] ?? null;
+        if (is_string($user) && is_string($password)) {
+            return [$user, $password];
+        }
+
+        $header = (string)(
+            $_SERVER['HTTP_AUTHORIZATION']
+            ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
+            ?? ''
+        );
+        if (!preg_match('/\ABasic\s+([A-Za-z0-9+\/=]+)\z/i', trim($header), $matches)) {
+            return null;
+        }
+
+        $decoded = base64_decode($matches[1], true);
+        if ($decoded === false || !str_contains($decoded, ':')) {
+            return null;
+        }
+
+        return explode(':', $decoded, 2);
+    }
+
 
     public static function jsonInput(int $maxBytes = 65536): array
     {
@@ -105,4 +252,3 @@ final class Http
         exit;
     }
 }
-

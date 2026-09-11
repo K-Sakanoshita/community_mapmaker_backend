@@ -1,0 +1,3 @@
+ALTER TABLE users
+    MODIFY COLUMN email VARCHAR(255) NULL,
+    MODIFY COLUMN email_normalized VARCHAR(255) NULL;

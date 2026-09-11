@@ -1,0 +1,4 @@
+services:
+  web:
+    ports:
+      - "${CMM_TEST_HOST_IPV4}:${CMM_TEST_WEB_PORT:-18080}:8080"

@@ -1,0 +1,80 @@
+services:
+  database:
+    image: mariadb:11.8
+    environment:
+      MARIADB_ROOT_PASSWORD: cmm_local_root
+      MARIADB_DATABASE: community_mapmaker
+      MARIADB_USER: cmm
+      MARIADB_PASSWORD: cmm_local_test
+    ports:
+      - "127.0.0.1:${CMM_TEST_DB_PORT:-13306}:3306"
+    volumes:
+      - database-data:/var/lib/mysql
+      - ../../schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+      - ./seed.sql:/docker-entrypoint-initdb.d/002-seed.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    networks:
+      - backend
+      - database-host
+
+  web:
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      CMM_AUTH_CONFIG: /run/cmm/local-config.php
+      CMM_TEST_WEB_PORT: "${CMM_TEST_WEB_PORT:-18080}"
+      CMM_TEST_HTTPS_PORT: "${CMM_TEST_HTTPS_PORT:-18443}"
+      CMM_TEST_LAN_HOST: "${CMM_TEST_LAN_HOST:-127.0.0.1}"
+      CMM_TEST_TAILSCALE_HOST: "${CMM_TEST_TAILSCALE_HOST:-}"
+      CMM_TEST_HOSTNAME: "${CMM_TEST_HOSTNAME:-}"
+      CMM_TEST_TAILSCALE_DNS: "${CMM_TEST_TAILSCALE_DNS:-}"
+    ports:
+      - "127.0.0.1:${CMM_TEST_WEB_PORT:-18080}:8080"
+    volumes:
+      - ../..:/app:ro
+      - ./config.php:/run/cmm/local-config.php:ro
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "php", "-r", "$$body = @file_get_contents('http://127.0.0.1:8080/api/activity-schema.php'); $$json = json_decode((string) $$body, true); exit(is_array($$json) && isset($$json['apps']) && is_array($$json['apps']) ? 0 : 1);"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+    networks:
+      - backend
+      - frontend
+
+  https-gateway:
+    image: caddy:2-alpine
+    environment:
+      CMM_TEST_LAN_HOST: "${CMM_TEST_LAN_HOST:-127.0.0.1}"
+    ports:
+      - "${CMM_TEST_LAN_HOST:-127.0.0.1}:${CMM_TEST_HTTPS_PORT:-18443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
+      - frontend
+
+volumes:
+  database-data:
+  caddy-data:
+    external: true
+    name: "${CMM_TEST_TLS_VOLUME:-community-mapmaker-backend-test-tls}"
+
+networks:
+  backend:
+    internal: true
+  database-host:
+  frontend:

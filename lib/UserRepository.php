@@ -13,12 +13,12 @@ final class UserRepository implements UserRepositoryInterface
     {
     }
 
-    public function create(string $userid, string $useridNormalized, string $email, string $emailNormalized, string $passwordHash, string $status): array
+    public function create(string $userid, string $useridNormalized, ?string $email, ?string $emailNormalized, string $passwordHash, string $status, string $role = 'user'): array
     {
         $now = gmdate('Y-m-d H:i:s');
         $statement = $this->pdo->prepare(
-            'INSERT INTO users (userid, userid_normalized, email, email_normalized, password_hash, status, email_verified_at, created_at, updated_at) '
-            . 'VALUES (:userid, :userid_normalized, :email, :email_normalized, :password_hash, :status, :verified_at, :created_at, :updated_at)'
+            'INSERT INTO users (userid, userid_normalized, email, email_normalized, password_hash, status, role, email_verified_at, created_at, updated_at) '
+            . 'VALUES (:userid, :userid_normalized, :email, :email_normalized, :password_hash, :status, :role, :verified_at, :created_at, :updated_at)'
         );
         try {
             $statement->execute([
@@ -28,7 +28,8 @@ final class UserRepository implements UserRepositoryInterface
                 ':email_normalized' => $emailNormalized,
                 ':password_hash' => $passwordHash,
                 ':status' => $status,
-                ':verified_at' => $status === 'active' ? $now : null,
+                ':role' => $role,
+                ':verified_at' => $status === 'active' && $email !== null ? $now : null,
                 ':created_at' => $now,
                 ':updated_at' => $now,
             ]);
@@ -53,9 +54,12 @@ final class UserRepository implements UserRepositoryInterface
     public function findByIdentity(string $identityNormalized): ?array
     {
         $statement = $this->pdo->prepare(
-            'SELECT * FROM users WHERE userid_normalized = :identity OR email_normalized = :identity LIMIT 1'
+            'SELECT * FROM users WHERE userid_normalized = :userid_identity OR email_normalized = :email_identity LIMIT 1'
         );
-        $statement->execute([':identity' => $identityNormalized]);
+        $statement->execute([
+            ':userid_identity' => $identityNormalized,
+            ':email_identity' => $identityNormalized,
+        ]);
         $user = $statement->fetch();
         return $user === false ? null : $user;
     }
@@ -74,9 +78,14 @@ final class UserRepository implements UserRepositoryInterface
         $statement = $this->pdo->prepare('UPDATE users SET password_hash = :password_hash, updated_at = :updated_at WHERE id = :id');
         $statement->execute([':password_hash' => $passwordHash, ':updated_at' => gmdate('Y-m-d H:i:s'), ':id' => $id]);
     }
+
+    public function recordLogin(int $id): void
+    {
+        $statement = $this->pdo->prepare('UPDATE users SET last_login_at = :last_login_at WHERE id = :id');
+        $statement->execute([':last_login_at' => gmdate('Y-m-d H:i:s'), ':id' => $id]);
+    }
 }
 
 final class DuplicateIdentityException extends RuntimeException
 {
 }
-

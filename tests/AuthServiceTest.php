@@ -21,17 +21,17 @@ final class MemoryUsers implements UserRepositoryInterface
     public array $rows = [];
     private int $nextId = 1;
 
-    public function create(string $userid, string $useridNormalized, string $email, string $emailNormalized, string $passwordHash, string $status): array
+    public function create(string $userid, string $useridNormalized, ?string $email, ?string $emailNormalized, string $passwordHash, string $status, string $role = 'user'): array
     {
         foreach ($this->rows as $row) {
-            if ($row['userid_normalized'] === $useridNormalized || $row['email_normalized'] === $emailNormalized) {
+            if ($row['userid_normalized'] === $useridNormalized || ($emailNormalized !== null && $row['email_normalized'] === $emailNormalized)) {
                 throw new CommunityMapMaker\Auth\DuplicateIdentityException();
             }
         }
         $row = [
             'id' => $this->nextId++, 'userid' => $userid, 'userid_normalized' => $useridNormalized,
             'email' => $email, 'email_normalized' => $emailNormalized,
-            'password_hash' => $passwordHash, 'status' => $status, 'email_verified_at' => null,
+            'password_hash' => $passwordHash, 'status' => $status, 'role' => $role, 'email_verified_at' => null,
         ];
         $this->rows[$row['id']] = $row;
         return $row;
@@ -59,6 +59,8 @@ final class MemoryUsers implements UserRepositoryInterface
     {
         $this->rows[$id]['password_hash'] = $passwordHash;
     }
+
+    public function recordLogin(int $id): void { $this->rows[$id]['last_login_at'] = gmdate('Y-m-d H:i:s'); }
 }
 
 final class MemoryTokens implements TokenRepositoryInterface
@@ -158,7 +160,7 @@ $config = [
     'verification_token_ttl_seconds' => 3600,
     'password_reset_token_ttl_seconds' => 900,
     'resend_cooldown_seconds' => 60,
-    'password_min_length' => 10,
+    'password_min_length' => 8,
     'verification_url' => 'https://example.jp/auth/verify.php',
     'password_reset_url' => 'https://example.jp/reset-password.html',
     'rate_limits' => [
@@ -253,4 +255,17 @@ $failedMailResult = $failedMailService->register([
 assertTrue($failedMailResult['verification_email_sent'] === false, 'Mail delivery failure must be reported.');
 assertTrue($failedMailUsers->rows[1]['status'] === 'pending', 'Mail delivery failure must keep the account pending for resend.');
 
+foreach (['1234567', 'あいうえおかき'] as $short) {
+    assertThrows(fn() => $directService->register([
+        'userid' => 'short-user', 'email' => 'short@example.jp',
+        'password' => $short, 'password_confirmation' => $short,
+    ], '192.0.2.12'), CommunityMapMaker\Auth\ValidationException::class, 'Seven characters must be rejected.');
+}
+foreach (['12345678', 'あいうえおかきく'] as $index => $valid) {
+    $directService->register([
+        'userid' => 'eight-user-' . $index, 'email' => 'eight' . $index . '@example.jp',
+        'password' => $valid, 'password_confirmation' => $valid,
+    ], '192.0.2.12');
+    assertTrue($directService->authenticate('eight-user-' . $index, $valid) !== null, 'Eight characters must authenticate.');
+}
 echo "AuthService behavior: ok\n";

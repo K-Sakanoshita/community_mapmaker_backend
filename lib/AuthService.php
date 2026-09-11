@@ -130,8 +130,112 @@ final class AuthService
             $token = $this->tokens->consume(self::RESET_PASSWORD, $tokenHash, $this->now());
             if ($token === null) throw new InvalidTokenException('The reset token is invalid or expired.');
             $this->users->updatePassword((int)$token['user_id'], $passwordHash);
+            $this->users->activate((int)$token['user_id']);
             $this->tokens->invalidate((int)$token['user_id'], self::RESET_PASSWORD);
         });
+    }
+
+    public function inviteUser(array $input, string $clientIdentifier): array
+    {
+        [$userid, $useridNormalized] = $this->validateUserid($input['userid'] ?? null);
+        [$email, $emailNormalized] = $this->validateEmail($input['email'] ?? null);
+        $role = $this->validateRole($input['role'] ?? 'user');
+        $this->enforceLimit('reset_client', 'client:' . $clientIdentifier);
+        $this->enforceLimit('reset_email', 'email:' . $emailNormalized);
+
+        $temporaryPassword = bin2hex(random_bytes(32));
+        $passwordHash = password_hash($temporaryPassword, PASSWORD_DEFAULT);
+        if ($passwordHash === false) throw new RuntimeException('Password hashing failed.');
+
+        $tokenData = null;
+        $user = $this->transactions->run(function () use ($userid, $useridNormalized, $email, $emailNormalized, $passwordHash, $role, &$tokenData): array {
+            $created = $this->users->create($userid, $useridNormalized, $email, $emailNormalized, $passwordHash, 'pending', $role);
+            $tokenData = $this->issueToken((int)$created['id'], self::RESET_PASSWORD, $this->passwordResetTtl());
+            return $created;
+        });
+        $sent = $this->mailer->sendPasswordReset(
+            $user,
+            $this->tokenUrl('password_reset_url', $tokenData['token']),
+            $tokenData['expires_at']
+        );
+        return ['user_id' => (int)$user['id'], 'password_setup_email_sent' => $sent];
+    }
+
+    public function createManagedUserWithoutEmail(array $input): array
+    {
+        [$userid, $useridNormalized] = $this->validateUserid($input['userid'] ?? null);
+        $role = $this->validateRole($input['role'] ?? 'user');
+        $password = $this->validatePassword($input['password'] ?? null, $input['password_confirmation'] ?? null);
+        $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+        if ($passwordHash === false) throw new RuntimeException('Password hashing failed.');
+
+        $user = $this->transactions->run(fn(): array => $this->users->create(
+            $userid,
+            $useridNormalized,
+            null,
+            null,
+            $passwordHash,
+            'active',
+            $role
+        ));
+        return ['user_id' => (int)$user['id']];
+    }
+
+    public function setPasswordForUser(int $userId, array $input): void
+    {
+        if ($this->users->findById($userId) === null) {
+            throw new ValidationException(['user' => 'User was not found.']);
+        }
+        $password = $this->validatePassword($input['password'] ?? null, $input['password_confirmation'] ?? null);
+        $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+        if ($passwordHash === false) throw new RuntimeException('Password hashing failed.');
+        $this->transactions->run(function () use ($userId, $passwordHash): void {
+            $this->users->updatePassword($userId, $passwordHash);
+        });
+    }
+
+    public function resendVerificationForUser(int $userId, string $clientIdentifier): array
+    {
+        $user = $this->users->findById($userId);
+        if ($user === null) throw new ValidationException(['user' => 'User was not found.']);
+        if (($user['email_normalized'] ?? null) === null || (string)$user['email_normalized'] === '') {
+            throw new ValidationException(['email' => 'This user does not have an email address.']);
+        }
+        if ((string)$user['status'] !== 'pending') {
+            throw new ValidationException(['status' => 'Verification can only be resent to pending users.']);
+        }
+        $this->enforceLimit('resend_client', 'client:' . $clientIdentifier);
+        $identity = (string)$user['email_normalized'];
+        $this->enforceDirectLimit('resend_cooldown', 'identity:' . $identity, 1, $this->resendCooldown());
+        $this->enforceLimit('resend_email', 'identity:' . $identity);
+        $tokenData = $this->transactions->run(fn(): array => $this->issueToken($userId, self::VERIFY_EMAIL, $this->verificationTtl()));
+        $sent = $this->mailer->sendVerification(
+            $user,
+            $this->tokenUrl('verification_url', $tokenData['token']),
+            $tokenData['expires_at']
+        );
+        return ['verification_email_sent' => $sent];
+    }
+
+    public function sendPasswordResetForUser(int $userId, string $clientIdentifier): array
+    {
+        $user = $this->users->findById($userId);
+        if ($user === null) throw new ValidationException(['user' => 'User was not found.']);
+        if (($user['email_normalized'] ?? null) === null || (string)$user['email_normalized'] === '') {
+            throw new ValidationException(['email' => 'This user does not have an email address.']);
+        }
+        if (!in_array((string)$user['status'], ['active', 'pending'], true)) {
+            throw new ValidationException(['status' => 'Password reset cannot be sent to a disabled user.']);
+        }
+        $this->enforceLimit('reset_client', 'client:' . $clientIdentifier);
+        $this->enforceLimit('reset_email', 'email:' . (string)$user['email_normalized']);
+        $tokenData = $this->transactions->run(fn(): array => $this->issueToken($userId, self::RESET_PASSWORD, $this->passwordResetTtl()));
+        $sent = $this->mailer->sendPasswordReset(
+            $user,
+            $this->tokenUrl('password_reset_url', $tokenData['token']),
+            $tokenData['expires_at']
+        );
+        return ['reset_email_sent' => $sent];
     }
 
     public function authenticate(string $identity, string $password): ?array
@@ -140,7 +244,13 @@ final class AuthService
         $user = $this->users->findByIdentity($normalized);
         if ($user === null || (string)$user['status'] !== 'active') return null;
         if (!password_verify($password, (string)$user['password_hash'])) return null;
-        return ['id' => (int)$user['id'], 'userid' => (string)$user['userid'], 'status' => 'active'];
+        $this->users->recordLogin((int)$user['id']);
+        return [
+            'id' => (int)$user['id'],
+            'userid' => (string)$user['userid'],
+            'status' => 'active',
+            'role' => (string)($user['role'] ?? 'user'),
+        ];
     }
 
     private function validateUserid(mixed $value): array
@@ -161,6 +271,15 @@ final class AuthService
         return [$email, mb_strtolower($email, 'UTF-8')];
     }
 
+    private function validateRole(mixed $value): string
+    {
+        $role = trim((string)$value);
+        if (!in_array($role, ['user', 'admin'], true)) {
+            throw new ValidationException(['role' => 'Role must be user or admin.']);
+        }
+        return $role;
+    }
+
     private function validateIdentity(mixed $value): array
     {
         $identity = trim((string)$value);
@@ -174,10 +293,10 @@ final class AuthService
     {
         $password = (string)$passwordValue;
         $confirmation = (string)$confirmationValue;
-        $minimum = max(8, (int)($this->config['password_min_length'] ?? 10));
+        $minimum = max(8, (int)($this->config['password_min_length'] ?? 8));
         $errors = [];
-        if (strlen($password) < $minimum || strlen($password) > 4096) {
-            $errors['password'] = sprintf('Password must contain between %d and 4096 bytes.', $minimum);
+        if (mb_strlen($password, 'UTF-8') < $minimum || strlen($password) > 4096) {
+            $errors['password'] = sprintf('Password must contain at least %d characters and at most 4096 bytes.', $minimum);
         }
         if (!hash_equals($password, $confirmation)) {
             $errors['password_confirmation'] = 'Password confirmation does not match.';
@@ -205,7 +324,9 @@ final class AuthService
     private function tokenUrl(string $configKey, string $token): string
     {
         $url = (string)($this->config[$configKey] ?? '');
-        if (!filter_var($url, FILTER_VALIDATE_URL) || !str_starts_with($url, 'https://')) {
+        $allowLocal = ($this->config['allow_insecure_local_urls'] ?? false) === true
+            && (bool)preg_match('#\Ahttp://(?:127\.0\.0\.1|localhost)(?::\d+)?/#', $url);
+        if (!filter_var($url, FILTER_VALIDATE_URL) || (!str_starts_with($url, 'https://') && !$allowLocal)) {
             throw new RuntimeException(sprintf('auth.%s must be an HTTPS URL.', $configKey));
         }
         return $url . (str_contains($url, '?') ? '&' : '?') . 'token=' . rawurlencode($token);

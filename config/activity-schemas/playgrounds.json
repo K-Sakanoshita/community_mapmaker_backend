@@ -1,0 +1,46 @@
+{
+  "fields": {
+    "actdate": {
+      "label": "投稿日",
+      "type": "date",
+      "required": true,
+      "admin": { "visible": true, "editable": true, "width": 140 }
+    },
+    "title": {
+      "label": "タイトル",
+      "type": "text",
+      "maxLength": 255,
+      "admin": { "visible": true, "editable": true, "width": 220 }
+    },
+    "score": {
+      "label": "評価",
+      "type": "select",
+      "options": ["act_score_1", "act_score_2", "act_score_3", "act_score_4", "act_score_5"],
+      "admin": { "visible": true, "editable": true, "width": 130 }
+    },
+    "good_points": {
+      "label": "よい点",
+      "type": "checkbox",
+      "options": [
+        "act_good_points_1",
+        "act_good_points_2",
+        "act_good_points_3",
+        "act_good_points_4",
+        "act_good_points_5"
+      ],
+      "admin": { "visible": true, "editable": true, "width": 180 }
+    },
+    "body": {
+      "label": "本文",
+      "type": "textarea",
+      "maxLength": 10000,
+      "admin": { "visible": true, "editable": true, "width": 320 }
+    },
+    "detail_url": {
+      "label": "詳細URL",
+      "type": "url",
+      "maxLength": 2048,
+      "admin": { "visible": true, "editable": true, "width": 240 }
+    }
+  }
+}
