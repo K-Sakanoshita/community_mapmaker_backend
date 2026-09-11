@@ -99,6 +99,9 @@ EOF_LIB_HTACCESS
 
 find "$PUBLIC_DIR" -type d -exec chmod 755 {} \;
 find "$PUBLIC_DIR" -type f -exec chmod 644 {} \;
+# Sakura documents 755/705 for executable PHP programs. 755 also keeps included
+# PHP files readable by the web runtime regardless of the selected PHP mode.
+find "$PUBLIC_DIR" -type f -name '*.php' -exec chmod 755 {} \;
 
 echo "Deployed to: $PUBLIC_DIR"
 echo "Private config: $CONFIG_FILE"
