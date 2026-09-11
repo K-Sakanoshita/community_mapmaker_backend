@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 use CommunityMapMaker\Auth\Database;
 
+require_once dirname(__DIR__) . '/lib/Contracts.php';
 require_once dirname(__DIR__) . '/lib/Database.php';
 
 if (PHP_SAPI !== 'cli') {
