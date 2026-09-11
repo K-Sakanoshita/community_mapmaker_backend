@@ -89,6 +89,7 @@ chmod +x scripts/deploy-sakura.sh
 - 公開側には、非公開側の `config/config.php` を `require` するだけのブリッジを生成
 - `.htaccess` で `bootstrap.php`、`lib/`、`config/` への直接 HTTP アクセスを拒否
 - ディレクトリ一覧表示を無効化
+- さくらの設置条件に合わせ、公開側の PHP ファイルを 755、その他の通常ファイルを 644、ディレクトリを 755 に設定
 
 PHP からの `require` は `.htaccess` の HTTP アクセス制限の影響を受けないため、API 自体は従来の相対パスのまま動作します。
 
@@ -137,6 +138,8 @@ https://YOUR_HOST/community-mapmaker-backend/config/config.php
 ```
 
 API が HTTP 500 の場合は、さくらのコントロールパネルのエラーログと PHP バージョン、PDO MySQL の有効化、DB 接続情報を確認してください。
+
+書き込み API の Basic 認証だけ失敗する場合は PHP の動作モードも確認してください。さくらの仕様上、PHP による HTTP 認証はモジュールモードで利用可能と案内されています。このバックエンドは `Authorization` / `REDIRECT_HTTP_AUTHORIZATION` も読み取りますが、サーバー側で Authorization ヘッダーが PHP に渡らない構成では認証できません。
 
 ## 補足
 
