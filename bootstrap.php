@@ -14,7 +14,6 @@ use CommunityMapMaker\Auth\TokenRepository;
 use CommunityMapMaker\Auth\UserRepository;
 use CommunityMapMaker\Activity\ActivityRepository;
 use CommunityMapMaker\Activity\ActivitySchema;
-use CommunityMapMaker\Activity\ActivitySearchService;
 use CommunityMapMaker\Activity\ActivityService;
 use CommunityMapMaker\Activity\CsvActivityImport;
 use CommunityMapMaker\Activity\ProjectRepository;
@@ -36,7 +35,6 @@ require_once __DIR__ . '/lib/Http.php';
 require_once __DIR__ . '/lib/ActivityRepository.php';
 require_once __DIR__ . '/lib/ProjectRepository.php';
 require_once __DIR__ . '/lib/ActivitySchema.php';
-require_once __DIR__ . '/lib/ActivitySearchService.php';
 require_once __DIR__ . '/lib/ActivityService.php';
 require_once __DIR__ . '/lib/ProjectService.php';
 require_once __DIR__ . '/lib/CsvActivityImport.php';
@@ -88,11 +86,6 @@ try {
         'project_access' => $projectAccess,
         'audit_logs' => $auditLogs,
         'activity' => $activityService,
-        'activity_search' => new ActivitySearchService(
-            $activityRepo,
-            $activitySchema,
-            (array)($activityConfig['apps'] ?? [])
-        ),
         'activity_schema' => $activitySchema,
         'activity_config' => $activityConfig,
         'project_repo' => $projectRepo,

@@ -29,6 +29,53 @@ final class ActivityService
         return array_map(fn(array $row): array => $this->flatten($row), $this->repository->list($appKey, $osmid));
     }
 
+    public function listSelected(string $appKey, array $input): array
+    {
+        $this->schema->appConfig($appKey);
+        $osmids = array_key_exists('osmids', $input) ? $this->parseOsmids($input['osmids']) : null;
+        $bbox = $osmids === null && array_key_exists('bbox', $input) ? $this->parseBbox($input['bbox']) : null;
+        return array_map(fn(array $row): array => $this->flatten($row), $this->repository->searchRows($appKey, $bbox, $osmids));
+    }
+
+    private function parseOsmids(mixed $value): array
+    {
+        if (!is_string($value) && !is_array($value)) throw new ActivityValidationException(['osmids' => 'Expected a string or list of strings.']);
+        if (is_array($value) && (!array_is_list($value) || count(array_filter($value, 'is_string')) !== count($value))) {
+            throw new ActivityValidationException(['osmids' => 'Expected a list of strings.']);
+        }
+        $items = is_array($value) ? $value : [$value];
+        $ids = [];
+        foreach ($items as $item) {
+            foreach (explode(',', $item) as $part) {
+                $part = trim($part);
+                if ($part !== '') $ids[$part] = true;
+            }
+        }
+        if (count($ids) > 1000) throw new ActivityValidationException(['osmids' => 'At most 1000 OSM IDs may be searched.']);
+        foreach (array_keys($ids) as $id) $this->validateOsmid($id);
+        return array_keys($ids);
+    }
+
+    private function parseBbox(mixed $value): array
+    {
+        if (!is_string($value)) throw new ActivityValidationException(['bbox' => 'Expected west,south,east,north.']);
+        $parts = explode(',', $value);
+        if (count($parts) !== 4) throw new ActivityValidationException(['bbox' => 'Expected west,south,east,north.']);
+        $bounds = [];
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if ($part === '' || !is_numeric($part) || !is_finite((float)$part)) {
+                throw new ActivityValidationException(['bbox' => 'Expected finite numeric bounds.']);
+            }
+            $bounds[] = (float)$part;
+        }
+        [$west, $south, $east, $north] = $bounds;
+        if ($west < -180 || $west > 180 || $east < -180 || $east > 180 || $south < -90 || $south > 90 || $north < -90 || $north > 90 || $west >= $east || $south >= $north) {
+            throw new ActivityValidationException(['bbox' => 'Bounds must be within longitude/latitude ranges and ordered west < east, south < north.']);
+        }
+        return $bounds;
+    }
+
     public function find(string $appKey, string $activityKey): array
     {
         $this->schema->appConfig($appKey);

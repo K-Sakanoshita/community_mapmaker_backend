@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 use CommunityMapMaker\Activity\ActivityApi;
+use CommunityMapMaker\Activity\ActivityValidationException;
 use CommunityMapMaker\Auth\Http;
 
 $container = require dirname(__DIR__) . '/bootstrap.php';
@@ -15,6 +16,22 @@ if ($method === 'GET') {
         $activityKey = ActivityApi::optionalActivityKey();
         if ($activityKey !== null) {
             return [200, $container['activity']->find($appKey, $activityKey)];
+        }
+        $unsupported = ['mode', 'score_min', 'attributes', 'match_mode', 'recent_only', 'photo_only', 'detail_only', 'research_mode', 'page', 'per_page'];
+        foreach ($unsupported as $parameter) {
+            if (array_key_exists($parameter, $_GET)) {
+                throw new ActivityValidationException([$parameter => 'Unsupported Activity parameter.']);
+            }
+        }
+        if (array_key_exists('osmids', $_GET) || array_key_exists('bbox', $_GET)) {
+            if (array_key_exists('osmid', $_GET)) {
+                throw new ActivityValidationException(['osmid' => 'Cannot combine osmid with osmids or bbox.']);
+            }
+            $rows = $container['activity']->listSelected($appKey, $_GET);
+            if (strtolower((string)($_GET['format'] ?? 'json')) === 'csv') {
+                outputCsv($rows, $container['activity_schema']->get($appKey));
+            }
+            return [200, $rows];
         }
         $osmid = isset($_GET['osmid']) ? trim((string)$_GET['osmid']) : null;
         $rows = $container['activity']->list($appKey, $osmid);

@@ -5,7 +5,6 @@ declare(strict_types=1);
 use CommunityMapMaker\Activity\ActivityRepository;
 use CommunityMapMaker\Activity\ActivitySchema;
 use CommunityMapMaker\Activity\ActivityService;
-use CommunityMapMaker\Activity\ActivitySearchService;
 use CommunityMapMaker\Activity\ActivityNotFoundException;
 use CommunityMapMaker\Activity\DuplicateActivityException;
 use CommunityMapMaker\Auth\TransactionManagerInterface;
@@ -14,7 +13,6 @@ require_once dirname(__DIR__) . '/lib/Contracts.php';
 require_once dirname(__DIR__) . '/lib/ActivityRepository.php';
 require_once dirname(__DIR__) . '/lib/ActivitySchema.php';
 require_once dirname(__DIR__) . '/lib/ActivityService.php';
-require_once dirname(__DIR__) . '/lib/ActivitySearchService.php';
 
 $pdo = new PDO(getenv('CMM_TEST_DSN') ?: 'mysql:host=database;dbname=community_mapmaker;charset=utf8mb4', 'cmm', 'cmm_local_test', [
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -52,7 +50,6 @@ $tx = new class($pdo) implements TransactionManagerInterface {
     }
 };
 $service = new ActivityService($repo, $schema, $tx);
-$search = new ActivitySearchService($repo, $schema, $apps);
 $input = ['app' => 'test', 'id' => 'test/1', 'osmid' => 'node/123', 'body' => 'preserve me', 'is_deleted' => 1, 'deleted_at' => 'fake'];
 $created = $service->create($input, false, $userId);
 $check(!isset($created['is_deleted'], $created['deleted_at']), 'Internal fields leaked');
@@ -85,9 +82,7 @@ $restored = $repo->find('test', 'test/1');
 $check($restored !== null && $restored['data']['body'] === 'preserve me', 'Restored row must retain data');
 $check((int)$pdo->query("SELECT is_deleted FROM activities WHERE app_key='test' AND activity_key='test/1'")->fetchColumn() === 0, 'Import did not clear deletion flag');
 $service->delete('test', 'test/1');
-$check($search->search('test', [])['pagination']['total'] === 0, 'Search includes deleted row');
-$missing = $search->search('test', ['osmids' => ['node/123'], 'research_mode' => 'missing']);
-$check($missing['items'][0]['activity_count'] === 0, 'Missing search counts deleted row');
+$check($repo->searchRows('test') === [] && $repo->searchRows('test', null, ['node/123']) === [], 'Filtered list excludes deleted rows');
 $service->create(['app' => 'test', 'id' => 'test/2', 'osmid' => 'node/123']);
 $throws(fn() => $service->batch('test', [], [], ['test/2', 'test/missing']), ActivityNotFoundException::class);
 $check($repo->find('test', 'test/2') !== null, 'Batch rollback lost active row');
@@ -118,10 +113,15 @@ $repo->create('test', 'test/deleted', null, 'way/10', [], null, ['latitude' => 3
 $repo->delete('test', 'test/deleted');
 $bbox = [135.0, 35.0, 135.5, 35.5];
 $found = $repo->searchRows('test', $bbox);
-$check(array_column($found, 'activity_key') === ['test/edge', 'test/in'], 'SQL BBOX must include edges and exclude other apps, deleted rows and null coordinates');
+$check(array_column($found, 'activity_key') === ['test/edge', 'test/in', 'test/coords'], 'SQL BBOX must include edges and unlocated rows, excluding other apps and deleted rows');
 $check(array_column($repo->searchRows('test', $bbox, ['way/10']), 'activity_key') === ['test/edge', 'test/in'], 'SQL BBOX and OSM ID filtering');
 $check($repo->searchRows('test', $bbox, ['way/20']) === [] && $repo->searchRows('test', $bbox, []) === [], 'SQL candidate exclusions');
 $check(array_column($repo->searchRows('test', null, ['way/20']), 'activity_key') === ['test/out'], 'SQL candidate filtering without BBOX');
-$boundedSearch = $search->search('test', ['bbox' => '135,35,135.5,35.5']);
-$check($boundedSearch['pagination']['total'] === 1 && $boundedSearch['items'][0]['activity_count'] === 2, 'SQL BBOX must preserve aggregation');
+$check(count($service->listSelected('test', ['bbox' => '135,35,135.5,35.5'])) === 3, 'BBOX list returns individual activities including unlocated rows');
+$priority = $service->listSelected('test', ['osmids' => 'way/10,relation/400', 'bbox' => 'invalid']);
+$check(array_column($priority, 'id') === ['test/edge', 'test/in'], 'OSM IDs override BBOX and return flat activities');
+$check($service->listSelected('test', ['osmids' => '']) === [], 'Empty OSM ID selection returns no activities');
+$throws(fn() => $service->listSelected('test', ['bbox' => '135,35,134,36']), CommunityMapMaker\Activity\ActivityValidationException::class);
+$throws(fn() => $service->listSelected('test', ['osmids' => 'invalid']), CommunityMapMaker\Activity\ActivityValidationException::class);
+
 echo "ActivityRepository tests passed.\n";

@@ -137,10 +137,12 @@ Activity SchemaはDBの物理スキーマではなく、入力検証と管理画
 GET api/activities.php?app=playgrounds
 GET api/activities.php?app=playgrounds&id=Playgrounds%2F0001
 GET api/activities.php?app=playgrounds&osmid=way/123
+GET api/activities.php?app=playgrounds&bbox=135,34,136,35
+GET api/activities.php?app=playgrounds&osmids=way/1,node/2
 GET api/activities.php?app=playgrounds&format=csv
 ```
 
-`id`なしのGETとJSON exportはフラットなActivity配列を返し、`id`指定時は該当する1件のActivityオブジェクトを返します。CSVは共通列（`id`、`osmid`、`latitude`、`longitude`、`form_key`）とSchemaに定義された列を出力します。
+通常のGETはフラットなActivity配列を返し、`id`指定時は該当する1件のActivityオブジェクトを返します。`bbox`指定時は範囲内のActivityと座標未登録のActivityの配列を、`osmids`指定時は候補OSM IDに紐づくActivity配列を返します。両方を指定した場合は`osmids`を優先し、`bbox`を無視します。CSVは共通列（`id`、`osmid`、`latitude`、`longitude`、`form_key`）とSchemaに定義された列を出力します。
 
 ### Activityの位置スナップショット
 
@@ -166,7 +168,7 @@ DELETE api/activities.php?app=playgrounds&id=Playgrounds%2F0001
 
 削除は論理削除です。単体DELETEと一括保存の`deletes`は、対象行を残したままDB内部の`is_deleted`を`1`にし、`deleted_at`と`updated_at`に削除日時（UTC）を記録します。本文・投稿者などの既存データは保持します。成功時は従来どおりHTTP 200と`{"status":"ok"}`（一括保存は従来の結果形式）を返します。
 
-- 削除済みActivityは一覧、OSM ID絞り込み、CSV、検索集計、ユーザー管理APIの投稿件数・最近の投稿から除外します。検索の候補`osmids`に指定した場合は、未登録と同様に残っているActivityだけで評価します。
+- 削除済みActivityは一覧、OSM ID絞り込み、CSV、ユーザー管理APIの投稿件数・最近の投稿から除外します。`osmids`による一覧にも削除済みActivityは含まれません。
 - 削除済みIDの個別GET・PUT・再DELETEはHTTP 404、`activity_not_found`です。
 - 同じapp内では削除済みIDも予約され、同一IDでのPOST・import実行はHTTP 409、`activity_already_exists`です。importのdry-runは入力検証用のため、この衝突を検出せず新規件数に数える場合があります。実行時の衝突はトランザクション全体をロールバックします。
 - 削除フラグ・削除日時は内部管理用で、通常のレスポンスには含めません。POST・PUT・importに`is_deleted` / `deleted_at`を渡しても無視します。復元・物理削除APIは提供しません。
@@ -245,143 +247,19 @@ DELETE api/projects.php?app=playgrounds
 
 CSVは`POST api/activity-import-csv.php`へ`app`、`csv`、`dry_run`を送ります。`dry_run`の既定値は`true`です。改行入り引用セルとUTF-8 BOMに対応し、ヘッダーから型を推定した`schema_candidate`、未定義カラム、追加が必要な選択肢、型変更候補を返します。旧Spreadsheetの日付`YYYY/MM/DD`は妥当な日付に限り`YYYY-MM-DD`へ正規化し、URL列内の`File:...`等は`wikimedia`型の候補として扱います。管理画面ではこれらの候補をSchemaへ反映してからActivityを取り込み、実Import時は保存済みSchemaで再検証します。CSVには`id`（または`activity_key`）が必須です。`osmid`列は任意で、既存Activityの行で省略した場合は保存済みのOSM IDが保持されますが、新規登録行は引き続き妥当な`osmid`が必要です。`latitude`／`longitude`列は任意で、空セルは`null`として座標を解除し、数値セルは数値として検証されます。座標列はSchema候補には含めません。
 
-### Activity検索API
+### Activity一覧の範囲指定
 
-`GET api/activity-search.php?app=playgrounds`は、同一OSM IDの複数Activityを集約し、平均評価・よかった点・最終確認日・写真・詳細情報の条件で絞り込みます。保存済みActivityの位置を使った地図の表示範囲（bbox）検索に対応します。公園と遊具の親子関係による集約、クライアントの未ロード時切替は含みません。
+`GET api/activities.php?app=playgrounds&bbox=135,34,136,35`は、保存済み座標が範囲内にあるActivityを1件ずつJSON配列で返します。`bbox`は`west,south,east,north`（経度、緯度、経度、緯度）の順で、境界を含みます。経度は-180〜180、緯度は-90〜90、west < east、south < northが必要です。日付変更線をまたぐ指定はできません。緯度・経度が両方未登録のActivityは、互換性のためBBOXに関係なく常に含みます。
 
-#### リクエスト
-
-認証不要の読み取り専用APIです。レスポンスはJSONです。
-
-| クエリパラメータ | 既定値 | 仕様 |
-| --- | --- | --- |
-| `app` | 必須 | 有効なProjectのキー。例: `playgrounds` |
-| `score_min` | `0` | 平均評価の下限（0〜5、小数可） |
-| `attributes` | 指定なし | よかった点のコードをカンマ区切りで指定。例: `act_good_points_1,act_good_points_2`。最大50種類 |
-| `match_mode` | `and` | `and`: 全コードを含む、`or`: いずれかを含む |
-| `recent_only` | `0` | `1`で最近確認されたものだけ |
-| `photo_only` | `0` | `1`で写真情報があるものだけ |
-| `detail_only` | `0` | `1`で詳細情報があるものだけ |
-| `research_mode` | 空文字 | `missing` / `stale` / `photo` / `sparse`。下記参照 |
-| `osmids` | 指定なし | 候補OSM IDをカンマ区切りで指定。例: `way/1,node/2`。最大1000種類 |
-| `bbox` | 指定なし | `west,south,east,north`（経度,緯度,経度,緯度）。例: `135,34,136,35` |
-| `page` | `1` | ページ番号（1〜1000000） |
-| `per_page` | `100` | 1ページの件数（1〜500） |
-
-`attributes`と`osmids`は`attributes[]=...`などの配列形式も受け付け、空要素と重複を除きます。属性コードは英数字で始まる1〜64文字で、英数字と`_ . : -`が使用できます。OSM IDは`node/`、`way/`、`relation/`と、先頭ゼロのない1〜19桁の正整数の組み合わせです。
-
-真偽値は`1/true/yes/on`と`0/false/no/off`（空文字もfalse）を受け付けます。通常の検索条件同士はANDで結合します。
-
-`research_mode`の意味は次のとおりです。指定時は`score_min`、`attributes`、`recent_only`、`photo_only`、`detail_only`による絞り込みを行いません。ただし、これらの入力値の検証は行います。候補OSM ID、bbox、ページ指定は引き続き適用します。
-
-| 値 | 条件 |
-| --- | --- |
-| `missing` | 詳細情報なし |
-| `stale` | 詳細情報があり、最近の確認なし |
-| `photo` | 写真情報なし |
-| `sparse` | 情報量が設定閾値未満（既定2） |
-
-例: `api/activity-search.php?app=playgrounds&score_min=4&photo_only=1`。JSONの`items`にOSM ID別の集約結果、`pagination`に件数・ページ情報を返します。`per_page`は既定100・最大500、`osmids`は最大1000件です。未知のパラメータや不正値はHTTP 422になります。
-
-`bbox`指定時は範囲内（境界を含む）に保存済みの緯度経度があるActivityだけを集約します。座標未登録のActivityは対象外です。経度は-180〜180、緯度は-90〜90で、west < east、south < northが必要です。日付変更線をまたぐ範囲は指定できません。`osmids`との併用時も、範囲内のActivityがない候補は位置を判定できないため返さず、`coverage: "activities_only"`、`complete: false`を返します。
-
-`osmids`を省略した検索は、Activityが存在するOSM IDだけを対象にし、`coverage: "activities_only"`、`complete: false`を返します。表示範囲などの候補OSM IDを`osmids`で渡した場合は、Activity未登録の候補も空の集約結果として評価し、`coverage: "requested_osmids"`、`complete: true`を返します。DBは公園全件を保持しておらず、任意の座標スナップショットも公園全件の位置情報ではないため、未ロード状態から「Activityが一件もない全公園」を検索するには、クライアントまたはOSM取得APIから候補OSM IDを渡す必要があります。`research_mode`指定時は他の検索条件より優先されます。
-
-#### レスポンス
-
-以下は`score_min=4&photo_only=1`に対する架空の応答例です。
-
-```json
-{
-  "status": "ok",
-  "items": [{
-    "osmid": "way/100",
-    "activity_count": 2,
-    "score": 4,
-    "attributes": ["act_good_points_1", "act_good_points_2"],
-    "confirmed": "2026-09-07T00:00:00Z",
-    "has_photo": true,
-    "has_detail": true,
-    "memo": "見守りやすい公園です。",
-    "latest_activity_id": "Playgrounds/2",
-    "is_recent": true,
-    "information_count": 5
-  }],
-  "pagination": {"page": 1, "per_page": 100, "total": 1, "total_pages": 1},
-  "criteria": {
-    "score_min": 4,
-    "attributes": [],
-    "match_mode": "and",
-    "recent_only": false,
-    "photo_only": true,
-    "detail_only": false,
-    "research_mode": ""
-  },
-  "coverage": "activities_only",
-  "complete": false,
-  "candidate_count": null
-}
-```
-
-| 項目 | 意味 |
-| --- | --- |
-| `items` | 条件に一致したOSM ID別の集約結果。Activity本体の配列ではありません |
-| `pagination.total` | ページ分割前の一致OSM ID数。Activity件数ではありません |
-| `pagination.total_pages` | 総ページ数。0件なら0。範囲外のページは`items: []` |
-| `criteria` | 既定値を補完・正規化した検索条件（`app`、`osmids`、ページ指定は含まない） |
-| `coverage` | `activities_only`または`requested_osmids` |
-| `complete` | 指定された候補OSM ID全体を評価したか。全公園を網羅した意味でも、全ページを返した意味でもありません |
-| `candidate_count` | 重複除去後の候補数。`osmids`省略時は`null`。bbox指定時も入力候補数を示す |
-
-`osmids=`を明示して空にすると、候補0件として`items: []`、`candidate_count: 0`、`complete: true`になります。
-
-#### 集約ルール
-
-- `activity_count`: 同一OSM IDのActivity件数。
-- `score`: 正の評価だけの平均を小数第1位に丸めます。評価なしは0。Playgrounds設定では`act_score_1`は0（平均対象外）、`act_score_6`は5です。
-- `attributes`: 各Activityの`good_points`の和集合です。
-- `confirmed` / `latest_activity_id`: 既定では`actdate`を優先し、同値なら`updatetime`、さらに同値ならActivity IDの文字列順で最新を選びます。確認日はUTCのISO 8601形式で、日付なしは空文字です。
-- `is_recent`: 確認日が現在時刻から設定日数（既定365日）以内かを表します。
-- `has_photo`: いずれかの`picture_urlN`に空でない値があるかです。画像の取得可否は検証しません。
-- `memo`: DB取得順で最初の空でない本文です。必ずしも`latest_activity_id`の本文ではありません。
-- `has_detail`: 正の評価、よかった点、写真、本文、詳細URLのいずれかがあるかです。
-- `information_count`: 評価あり（1）＋よかった点の種類数＋写真あり（1）＋本文あり（1）＋詳細URLあり（1）。
-
-結果は`confirmed`の降順、同値なら`osmid`の文字列昇順です。参照フィールドや評価コードのオフセット、最近とみなす日数、情報量の閾値はProjectごとの`search`設定に従います。
-
-#### エラーと利用例
-
-| HTTPステータス | `code` | 意味 |
-| --- | --- | --- |
-| 404 | `app_not_found` | Projectが存在しない、未指定、または無効 |
-| 405 | `method_not_allowed` | GET以外の非対応メソッド |
-| 422 | `validation_failed` | 不正値、件数上限超過、未知のパラメータまたは不正な`bbox` |
-| 500 | `server_error` | サーバー内部エラー。照会用の`request_id`を返す |
-
-```json
-{"status":"error","code":"validation_failed","errors":{"score_min":"Score minimum must be between 0 and 5."}}
-```
+`osmids=way/1,node/2`は、指定したOSM IDに紐づくActivityだけを返します。`osmids[]=way/1`の配列形式も受け付け、空要素と重複を除きます。最大1000種類です。`osmids`を指定した場合は`bbox`を無視し、`osmids=`の空指定は空配列を返します。`osmid`（単数形）は従来どおり単一OSM IDで絞り、`osmids`や`bbox`と併用できません。
 
 ```sh
-# 評価4以上で写真あり
-curl --get 'http://192.168.1.6:18080/api/activity-search.php' \
-  --data-urlencode 'app=playgrounds' \
-  --data-urlencode 'score_min=4' \
-  --data-urlencode 'photo_only=1'
-
-# 保存済みActivityの位置で表示範囲を絞る
-curl --get 'http://192.168.1.6:18080/api/activity-search.php' \
+curl --get 'http://192.168.1.6:18080/api/activities.php' \
   --data-urlencode 'app=playgrounds' \
   --data-urlencode 'bbox=135,34,136,35'
-
-# 候補のうち詳細情報がないもの（Activity未登録も含む）
-curl --get 'http://192.168.1.6:18080/api/activity-search.php' \
-  --data-urlencode 'app=playgrounds' \
-  --data-urlencode 'osmids=way/100,node/200' \
-  --data-urlencode 'research_mode=missing'
 ```
 
-ブラウザから別オリジンで呼ぶ場合はサーバーのCORS許可設定が必要です。`bbox`や`osmids`の指定時は、保存済みActivityをSQLで絞ってからPHPで集約します。指定なしではProject内のActivity全件を読み込みます。ページ分割は集約後に行うため、`page`や`per_page`だけではDB読み込み量は減りません。
+`bbox`と`osmids`を指定した一覧も`format=csv`でCSVとして出力できます。別オリジンのブラウザから呼ぶ場合はサーバーのCORS許可設定が必要です。範囲指定時はSQLで対象のActivityを絞ってから取得します。
 
 ## 管理コンソール
 
@@ -517,7 +395,6 @@ docker exec community-mapmaker-backend-test-web-1 php /app/tests/ActivityReposit
 php tests/AuthServiceTest.php
 php tests/AdminUserServiceTest.php
 php tests/ActivityServiceTest.php
-php tests/ActivitySearchServiceTest.php
 php tests/ProjectServiceTest.php
 php tests/ProjectAccessServiceTest.php
 php tests/CsvActivityImportTest.php
@@ -525,7 +402,7 @@ find . -type f -name '*.php' -print0 | xargs -0 -n1 php -l
 node --check admin/admin.js
 ```
 
-Activityテストでは、JSON可変項目、Schema削除後の未知フィールド保持、アプリ分離、OSM ID絞り込み、追加・更新・削除、一括保存、投稿者記録、サーバー生成ID、Schema検証、import dry-run/upsert、Activity検索の集約・条件・候補OSM IDを確認します。Projectテストでは`app_key`の一意性・不変性、カラム順、選択肢順、Schema検証を、Project accessテストではadmin・editor・project_admin・viewer・未割り当ての境界を確認します。CSVテストではBOM、改行入りセル、必須ヘッダー、座標列、Schema候補を確認します。認証・ユーザー管理テストでは、登録、招待、role、最後のadmin保護、Project権限、監査ログ、平文パスワード非保存、確認前認証拒否、1回限りトークン、パスワード再設定、Rate Limitを確認します。
+Activityテストでは、JSON可変項目、Schema削除後の未知フィールド保持、アプリ分離、OSM ID絞り込み、追加・更新・削除、一括保存、投稿者記録、サーバー生成ID、Schema検証、import dry-run/upsert、BBOX・候補OSM IDによるActivity一覧を確認します。Projectテストでは`app_key`の一意性・不変性、カラム順、選択肢順、Schema検証を、Project accessテストではadmin・editor・project_admin・viewer・未割り当ての境界を確認します。CSVテストではBOM、改行入りセル、必須ヘッダー、座標列、Schema候補を確認します。認証・ユーザー管理テストでは、登録、招待、role、最後のadmin保護、Project権限、監査ログ、平文パスワード非保存、確認前認証拒否、1回限りトークン、パスワード再設定、Rate Limitを確認します。
 
 ## 現在の実装範囲
 

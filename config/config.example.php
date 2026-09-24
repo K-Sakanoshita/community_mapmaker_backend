@@ -41,18 +41,6 @@ return [
                 'schema_file' => getenv('CMM_PLAYGROUNDS_ACTIVITY_SCHEMA') ?: __DIR__ . '/activity-schemas/playgrounds.json',
                 // Until #1 adds anonymous posting, writes require an active account.
                 'write_auth_required' => true,
-                'search' => [
-                    'score_field' => 'score',
-                    'attributes_field' => 'good_points',
-                    'body_field' => 'body',
-                    'detail_url_field' => 'detail_url',
-                    'date_fields' => ['actdate', 'updatetime'],
-                    'photo_field_pattern' => '/^picture_url\\d+$/',
-                    'score_code_pattern' => '/^act_score_(\\d+)$/',
-                    'score_code_offset' => 1,
-                    'recent_days' => 365,
-                    'sparse_information_count' => 2,
-                ],
             ],
         ],
     ],

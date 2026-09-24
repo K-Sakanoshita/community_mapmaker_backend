@@ -32,6 +32,18 @@ final class ActivityRepository implements ActivityRepositoryInterface
     public function searchRows(string $appKey, ?array $bbox = null, ?array $osmids = null): array
     {
         if ($osmids === []) return [];
+        if ($bbox !== null && $osmids === null) {
+            $select = 'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at FROM activities WHERE is_deleted = 0 AND app_key = ';
+            $sql = $select . ':app_key_bbox AND longitude BETWEEN :west AND :east AND latitude BETWEEN :south AND :north '
+                . 'UNION ALL ' . $select . ':app_key_unlocated AND longitude IS NULL AND latitude IS NULL '
+                . 'ORDER BY updated_at DESC, id DESC';
+            $statement = $this->pdo->prepare($sql);
+            $statement->execute([
+                ':app_key_bbox' => $appKey, ':app_key_unlocated' => $appKey,
+                ':west' => $bbox[0], ':south' => $bbox[1], ':east' => $bbox[2], ':north' => $bbox[3],
+            ]);
+            return array_map(fn(array $row): array => $this->decode($row), $statement->fetchAll());
+        }
         $sql = 'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at '
             . 'FROM activities WHERE is_deleted = 0 AND app_key = :app_key';
         $params = [':app_key' => $appKey];

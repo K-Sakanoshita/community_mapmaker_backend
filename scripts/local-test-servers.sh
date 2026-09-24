@@ -402,7 +402,7 @@ test_stack() {
         mariadb-admin ping --user=cmm --silent >/dev/null
     curl --fail --silent --show-error "$base/admin/" >/dev/null
     fetch_schema --fail --silent --show-error "$base/api/activity-schema.php"
-    curl --fail --silent --show-error "$base/api/activity-search.php?app=playgrounds&score_min=4" >/dev/null
+    curl --fail --silent --show-error "$base/api/activities.php?app=playgrounds&bbox=135,34,136,35" >/dev/null
     if [[ -n "$host_name" && -n "$host_ipv4" && "$host_ipv4" != 127.* ]]; then
         fetch_schema --noproxy '*' --fail --silent --show-error "http://$host_name:$web_port/api/activity-schema.php"
     fi
