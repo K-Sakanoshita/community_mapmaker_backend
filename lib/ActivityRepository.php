@@ -16,7 +16,7 @@ final class ActivityRepository implements ActivityRepositoryInterface
 
     public function list(string $appKey, ?string $osmid = null): array
     {
-        $sql = 'SELECT id, app_key, activity_key, form_key, osmid, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at '
+        $sql = 'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at '
             . 'FROM activities WHERE is_deleted = 0 AND app_key = :app_key';
         $params = [':app_key' => $appKey];
         if ($osmid !== null) {
@@ -32,7 +32,7 @@ final class ActivityRepository implements ActivityRepositoryInterface
     public function find(string $appKey, string $activityKey): ?array
     {
         $statement = $this->pdo->prepare(
-            'SELECT id, app_key, activity_key, form_key, osmid, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at '
+            'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at '
             . 'FROM activities WHERE is_deleted = 0 AND app_key = :app_key AND activity_key = :activity_key LIMIT 1'
         );
         $statement->execute([':app_key' => $appKey, ':activity_key' => $activityKey]);
@@ -40,12 +40,42 @@ final class ActivityRepository implements ActivityRepositoryInterface
         return $row === false ? null : $this->decode($row);
     }
 
-    public function create(string $appKey, string $activityKey, ?string $formKey, string $osmid, array $data, ?int $createdByUserId = null): array
+    public function findForImport(string $appKey, string $activityKey): ?array
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at, is_deleted '
+            . 'FROM activities WHERE app_key = :app_key AND activity_key = :activity_key LIMIT 1'
+        );
+        $statement->execute([':app_key' => $appKey, ':activity_key' => $activityKey]);
+        $row = $statement->fetch();
+        return $row === false ? null : $this->decode($row);
+    }
+
+    public function restoreForImport(string $appKey, string $activityKey, ?string $formKey, string $osmid, array $data, ?int $updatedByUserId = null, ?array $coordinates = null): ?array
+    {
+        $statement = $this->pdo->prepare(
+            'UPDATE activities SET is_deleted = 0, deleted_at = NULL, '
+            . ($coordinates === null ? '' : 'latitude = :latitude, longitude = :longitude, ')
+            . 'form_key = :form_key, osmid = :osmid, data_json = :data_json, updated_by_user_id = :updated_by_user_id, updated_at = :updated_at '
+            . 'WHERE is_deleted = 1 AND app_key = :app_key AND activity_key = :activity_key'
+        );
+        $params = [':form_key' => $formKey, ':osmid' => $osmid, ':data_json' => $this->encode($data),
+            ':updated_by_user_id' => $updatedByUserId, ':updated_at' => gmdate('Y-m-d H:i:s'),
+            ':app_key' => $appKey, ':activity_key' => $activityKey];
+        if ($coordinates !== null) {
+            $params[':latitude'] = $coordinates['latitude'];
+            $params[':longitude'] = $coordinates['longitude'];
+        }
+        $statement->execute($params);
+        return $statement->rowCount() === 0 ? null : $this->find($appKey, $activityKey);
+    }
+
+    public function create(string $appKey, string $activityKey, ?string $formKey, string $osmid, array $data, ?int $createdByUserId = null, ?array $coordinates = null): array
     {
         $now = gmdate('Y-m-d H:i:s');
         $statement = $this->pdo->prepare(
-            'INSERT INTO activities (app_key, activity_key, form_key, osmid, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at) '
-            . 'VALUES (:app_key, :activity_key, :form_key, :osmid, :data_json, :created_by_user_id, :updated_by_user_id, :created_at, :updated_at)'
+            'INSERT INTO activities (app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at) '
+            . 'VALUES (:app_key, :activity_key, :form_key, :osmid, :latitude, :longitude, :data_json, :created_by_user_id, :updated_by_user_id, :created_at, :updated_at)'
         );
         try {
             $statement->execute([
@@ -53,6 +83,8 @@ final class ActivityRepository implements ActivityRepositoryInterface
                 ':activity_key' => $activityKey,
                 ':form_key' => $formKey,
                 ':osmid' => $osmid,
+                ':latitude' => $coordinates['latitude'] ?? null,
+                ':longitude' => $coordinates['longitude'] ?? null,
                 ':data_json' => $this->encode($data),
                 ':created_by_user_id' => $createdByUserId,
                 ':updated_by_user_id' => $createdByUserId,
@@ -69,13 +101,13 @@ final class ActivityRepository implements ActivityRepositoryInterface
             ?? throw new RuntimeException('Created activity could not be loaded.');
     }
 
-    public function update(string $appKey, string $activityKey, ?string $formKey, string $osmid, array $data, ?int $updatedByUserId = null): ?array
+    public function update(string $appKey, string $activityKey, ?string $formKey, string $osmid, array $data, ?int $updatedByUserId = null, ?array $coordinates = null): ?array
     {
         $statement = $this->pdo->prepare(
-            'UPDATE activities SET form_key = :form_key, osmid = :osmid, data_json = :data_json, updated_by_user_id = :updated_by_user_id, updated_at = :updated_at '
+            'UPDATE activities SET ' . ($coordinates === null ? '' : 'latitude = :latitude, longitude = :longitude, ') . 'form_key = :form_key, osmid = :osmid, data_json = :data_json, updated_by_user_id = :updated_by_user_id, updated_at = :updated_at '
             . 'WHERE is_deleted = 0 AND app_key = :app_key AND activity_key = :activity_key'
         );
-        $statement->execute([
+        $params = [
             ':form_key' => $formKey,
             ':osmid' => $osmid,
             ':data_json' => $this->encode($data),
@@ -83,7 +115,12 @@ final class ActivityRepository implements ActivityRepositoryInterface
             ':updated_at' => gmdate('Y-m-d H:i:s'),
             ':app_key' => $appKey,
             ':activity_key' => $activityKey,
-        ]);
+        ];
+        if ($coordinates !== null) {
+            $params[':latitude'] = $coordinates['latitude'];
+            $params[':longitude'] = $coordinates['longitude'];
+        }
+        $statement->execute($params);
         return $statement->rowCount() === 0 && $this->find($appKey, $activityKey) === null
             ? null
             : $this->find($appKey, $activityKey);

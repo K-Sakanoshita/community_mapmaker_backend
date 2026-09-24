@@ -21,7 +21,11 @@ final class ActivitySearchService
         $this->schema->appConfig($appKey);
         $criteria = $this->criteria($input);
         $config = $this->config($appKey);
-        $records = $this->summaries($this->repository->list($appKey), $config);
+        $rows = $this->repository->list($appKey);
+        if ($criteria['bbox'] !== null) {
+            $rows = array_values(array_filter($rows, fn(array $row): bool => $this->inBbox($row, $criteria['bbox'])));
+        }
+        $records = $this->summaries($rows, $config);
 
         if ($criteria['osmids'] !== null) {
             $byOsmid = [];
@@ -30,6 +34,9 @@ final class ActivitySearchService
                 fn(string $osmid): array => $byOsmid[$osmid] ?? $this->emptySummary($osmid),
                 $criteria['osmids']
             );
+            if ($criteria['bbox'] !== null) {
+                $records = array_values(array_filter($records, static fn(array $record): bool => $record['activity_count'] > 0));
+            }
         }
 
         $matches = array_values(array_filter(
@@ -44,7 +51,7 @@ final class ActivitySearchService
         $total = count($matches);
         $page = $criteria['page'];
         $perPage = $criteria['per_page'];
-        $coverage = $criteria['osmids'] === null ? 'activities_only' : 'requested_osmids';
+        $coverage = $criteria['osmids'] === null || $criteria['bbox'] !== null ? 'activities_only' : 'requested_osmids';
 
         return [
             'items' => array_slice($matches, ($page - 1) * $perPage, $perPage),
@@ -63,7 +70,7 @@ final class ActivitySearchService
 
     private function criteria(array $input): array
     {
-        $allowed = ['app', 'score_min', 'attributes', 'match_mode', 'recent_only', 'photo_only', 'detail_only', 'research_mode', 'osmids', 'page', 'per_page'];
+        $allowed = ['app', 'score_min', 'attributes', 'match_mode', 'recent_only', 'photo_only', 'detail_only', 'research_mode', 'osmids', 'bbox', 'page', 'per_page'];
         foreach ($input as $key => $value) {
             if (!in_array($key, $allowed, true)) {
                 throw new ActivityValidationException([(string)$key => 'Unsupported search parameter.']);
@@ -106,9 +113,39 @@ final class ActivitySearchService
             'detail_only' => $this->boolean($input['detail_only'] ?? false, 'detail_only'),
             'research_mode' => $researchMode,
             'osmids' => array_key_exists('osmids', $input) ? $this->osmids($input['osmids']) : null,
+            'bbox' => array_key_exists('bbox', $input) ? $this->bbox($input['bbox']) : null,
             'page' => $page,
             'per_page' => $perPage,
         ];
+    }
+
+    private function bbox(mixed $value): array
+    {
+        if (!is_string($value)) throw new ActivityValidationException(['bbox' => 'Expected west,south,east,north.']);
+        $parts = explode(',', $value);
+        if (count($parts) !== 4) throw new ActivityValidationException(['bbox' => 'Expected west,south,east,north.']);
+        $bounds = [];
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if ($part === '' || !is_numeric($part) || !is_finite((float)$part)) {
+                throw new ActivityValidationException(['bbox' => 'Expected finite numeric bounds.']);
+            }
+            $bounds[] = (float)$part;
+        }
+        [$west, $south, $east, $north] = $bounds;
+        if ($west < -180 || $west > 180 || $east < -180 || $east > 180 || $south < -90 || $south > 90 || $north < -90 || $north > 90 || $west >= $east || $south >= $north) {
+            throw new ActivityValidationException(['bbox' => 'Bounds must be within longitude/latitude ranges and ordered west < east, south < north.']);
+        }
+        return $bounds;
+    }
+
+    private function inBbox(array $row, array $bbox): bool
+    {
+        $latitude = $row['latitude'] ?? null;
+        $longitude = $row['longitude'] ?? null;
+        if ($latitude === null || $longitude === null || !is_numeric($latitude) || !is_numeric($longitude)) return false;
+        return (float)$longitude >= $bbox[0] && (float)$longitude <= $bbox[2]
+            && (float)$latitude >= $bbox[1] && (float)$latitude <= $bbox[3];
     }
 
     private function summaries(array $rows, array $config): array

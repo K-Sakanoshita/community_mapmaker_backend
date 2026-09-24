@@ -50,7 +50,7 @@ ActivityApi::run(function () use ($container, $method): array {
 
 function outputCsv(array $rows, array $schema): never
 {
-    $fields = ['id', 'osmid', 'form_key'];
+    $fields = ['id', 'osmid', 'latitude', 'longitude', 'form_key'];
     foreach (array_keys((array)$schema['fields']) as $field) {
         if (!in_array($field, $fields, true)) $fields[] = $field;
     }
@@ -58,7 +58,7 @@ function outputCsv(array $rows, array $schema): never
     header('Content-Disposition: attachment; filename="activities.csv"');
     echo "\xEF\xBB\xBF";
     $stream = fopen('php://output', 'wb');
-    fputcsv($stream, $fields);
+    fputcsv($stream, $fields, ',', '"', '');
     foreach ($rows as $row) {
         $values = [];
         foreach ($fields as $field) {
@@ -67,7 +67,7 @@ function outputCsv(array $rows, array $schema): never
                 ? json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)
                 : $value;
         }
-        fputcsv($stream, $values);
+        fputcsv($stream, $values, ',', '"', '');
     }
     fclose($stream);
     exit;

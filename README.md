@@ -28,7 +28,7 @@ schema.sql
 
 ## セットアップ
 
-1. MySQLにデータベースを作り、`schema.sql`を適用します。認証テーブル導入済みのDBには`migrations/001_activity_core.sql`、`migrations/002_projects_core.sql`、`migrations/003_admin_users.sql`、`migrations/004_optional_user_email.sql`、`migrations/005_activity_soft_delete.sql`の順で適用します。
+1. MySQLにデータベースを作り、`schema.sql`を適用します。認証テーブル導入済みのDBには`migrations/001_activity_core.sql`、`migrations/002_projects_core.sql`、`migrations/003_admin_users.sql`、`migrations/004_optional_user_email.sql`、`migrations/005_activity_soft_delete.sql`、`migrations/006_activity_coordinates.sql`の順で適用します。
 2. `config/config.example.php`を、Web公開ディレクトリ外の場所へコピーします。
 3. DB接続、許可Origin、確認URL、再設定画面URL、送信者情報を設定します。
 4. `CMM_AUTH_CONFIG`環境変数に実設定ファイルの絶対パスを指定します。
@@ -140,7 +140,19 @@ GET api/activities.php?app=playgrounds&osmid=way/123
 GET api/activities.php?app=playgrounds&format=csv
 ```
 
-`id`なしのGETとJSON exportはフラットなActivity配列を返し、`id`指定時は該当する1件のActivityオブジェクトを返します。CSVはSchemaに定義された列を出力します。
+`id`なしのGETとJSON exportはフラットなActivity配列を返し、`id`指定時は該当する1件のActivityオブジェクトを返します。CSVは共通列（`id`、`osmid`、`latitude`、`longitude`、`form_key`）とSchemaに定義された列を出力します。
+
+### Activityの位置スナップショット
+
+`latitude` / `longitude` はActivity本体の任意の共通メタデータで、Schemaのユーザー入力フィールドには定義しません。作成・更新時にクライアントが把握した位置を保存し、外部OSMサービスからの取得・同期は行いません。
+
+- 緯度は-90〜90、経度は-180〜180の有限の数値（数値文字列も可）。小数点以下7桁に丸めて保存します。
+- 両方を省略した作成は両方 `NULL`。更新・既存行のimportでは現在の座標を保持します。
+- 変更時は必ずセットで指定します。両方を `null` にすると解除します。片方だけの指定、片方だけ `null`、非数値・範囲外は422エラーです。
+- JSONレスポンスには両方を常に返します。保存済みなら数値、未保存なら `null` です。batchとJSON importも同じ扱いです。
+- CSV import/exportも両列に対応します。両方の空セルは `null` として解除、両列がない既存CSVは従来どおり処理します。座標列はSchema候補に含めません。
+
+既存DBではコード更新前に `migrations/006_activity_coordinates.sql` を一度適用してください。既存行は両方 `NULL` のままで、バックフィルは行いません。新規DBは `schema.sql` を使用します。
 
 ### Activity追加・更新・削除
 
@@ -229,11 +241,11 @@ DELETE api/projects.php?app=playgrounds
 
 最初に`dry_run: true`で検証と新規・更新件数を確認し、問題なければ`false`で取り込みます。`app_key + activity_key`が一致する行は更新されます。一度に取り込めるのは5,000件までで、DB反映はトランザクション内で行います。
 
-CSVは`POST api/activity-import-csv.php`へ`app`、`csv`、`dry_run`を送ります。`dry_run`の既定値は`true`です。改行入り引用セルとUTF-8 BOMに対応し、ヘッダーから型を推定した`schema_candidate`、未定義カラム、追加が必要な選択肢、型変更候補を返します。旧Spreadsheetの日付`YYYY/MM/DD`は妥当な日付に限り`YYYY-MM-DD`へ正規化し、URL列内の`File:...`等は`wikimedia`型の候補として扱います。管理画面ではこれらの候補をSchemaへ反映してからActivityを取り込み、実Import時は保存済みSchemaで再検証します。CSVには`id`（または`activity_key`）と`osmid`が必要です。
+CSVは`POST api/activity-import-csv.php`へ`app`、`csv`、`dry_run`を送ります。`dry_run`の既定値は`true`です。改行入り引用セルとUTF-8 BOMに対応し、ヘッダーから型を推定した`schema_candidate`、未定義カラム、追加が必要な選択肢、型変更候補を返します。旧Spreadsheetの日付`YYYY/MM/DD`は妥当な日付に限り`YYYY-MM-DD`へ正規化し、URL列内の`File:...`等は`wikimedia`型の候補として扱います。管理画面ではこれらの候補をSchemaへ反映してからActivityを取り込み、実Import時は保存済みSchemaで再検証します。CSVには`id`（または`activity_key`）が必須です。`osmid`列は任意で、既存Activityの行で省略した場合は保存済みのOSM IDが保持されますが、新規登録行は引き続き妥当な`osmid`が必要です。`latitude`／`longitude`列は任意で、空セルは`null`として座標を解除し、数値セルは数値として検証されます。座標列はSchema候補には含めません。
 
 ### Activity検索API
 
-`GET api/activity-search.php?app=playgrounds`は、同一OSM IDの複数Activityを集約し、平均評価・よかった点・最終確認日・写真・詳細情報の条件で絞り込みます。地図の表示範囲（bbox）検索、公園と遊具の親子関係による集約、クライアントの未ロード時切替は含みません。
+`GET api/activity-search.php?app=playgrounds`は、同一OSM IDの複数Activityを集約し、平均評価・よかった点・最終確認日・写真・詳細情報の条件で絞り込みます。保存済みActivityの位置を使った地図の表示範囲（bbox）検索に対応します。公園と遊具の親子関係による集約、クライアントの未ロード時切替は含みません。
 
 #### リクエスト
 
@@ -250,6 +262,7 @@ CSVは`POST api/activity-import-csv.php`へ`app`、`csv`、`dry_run`を送りま
 | `detail_only` | `0` | `1`で詳細情報があるものだけ |
 | `research_mode` | 空文字 | `missing` / `stale` / `photo` / `sparse`。下記参照 |
 | `osmids` | 指定なし | 候補OSM IDをカンマ区切りで指定。例: `way/1,node/2`。最大1000種類 |
+| `bbox` | 指定なし | `west,south,east,north`（経度,緯度,経度,緯度）。例: `135,34,136,35` |
 | `page` | `1` | ページ番号（1〜1000000） |
 | `per_page` | `100` | 1ページの件数（1〜500） |
 
@@ -257,7 +270,7 @@ CSVは`POST api/activity-import-csv.php`へ`app`、`csv`、`dry_run`を送りま
 
 真偽値は`1/true/yes/on`と`0/false/no/off`（空文字もfalse）を受け付けます。通常の検索条件同士はANDで結合します。
 
-`research_mode`の意味は次のとおりです。指定時は`score_min`、`attributes`、`recent_only`、`photo_only`、`detail_only`による絞り込みを行いません。ただし、これらの入力値の検証は行います。候補OSM IDとページ指定は引き続き適用します。
+`research_mode`の意味は次のとおりです。指定時は`score_min`、`attributes`、`recent_only`、`photo_only`、`detail_only`による絞り込みを行いません。ただし、これらの入力値の検証は行います。候補OSM ID、bbox、ページ指定は引き続き適用します。
 
 | 値 | 条件 |
 | --- | --- |
@@ -268,7 +281,9 @@ CSVは`POST api/activity-import-csv.php`へ`app`、`csv`、`dry_run`を送りま
 
 例: `api/activity-search.php?app=playgrounds&score_min=4&photo_only=1`。JSONの`items`にOSM ID別の集約結果、`pagination`に件数・ページ情報を返します。`per_page`は既定100・最大500、`osmids`は最大1000件です。未知のパラメータや不正値はHTTP 422になります。
 
-`osmids`を省略した検索は、Activityが存在するOSM IDだけを対象にし、`coverage: "activities_only"`、`complete: false`を返します。表示範囲などの候補OSM IDを`osmids`で渡した場合は、Activity未登録の候補も空の集約結果として評価し、`coverage: "requested_osmids"`、`complete: true`を返します。DBは公園全件や座標を保持していないため、未ロード状態から「Activityが一件もない全公園」を検索するには、クライアントまたはOSM取得APIから候補OSM IDを渡す必要があります。`research_mode`指定時は他の検索条件より優先されます。
+`bbox`指定時は範囲内（境界を含む）に保存済みの緯度経度があるActivityだけを集約します。座標未登録のActivityは対象外です。経度は-180〜180、緯度は-90〜90で、west < east、south < northが必要です。日付変更線をまたぐ範囲は指定できません。`osmids`との併用時も、範囲内のActivityがない候補は位置を判定できないため返さず、`coverage: "activities_only"`、`complete: false`を返します。
+
+`osmids`を省略した検索は、Activityが存在するOSM IDだけを対象にし、`coverage: "activities_only"`、`complete: false`を返します。表示範囲などの候補OSM IDを`osmids`で渡した場合は、Activity未登録の候補も空の集約結果として評価し、`coverage: "requested_osmids"`、`complete: true`を返します。DBは公園全件を保持しておらず、任意の座標スナップショットも公園全件の位置情報ではないため、未ロード状態から「Activityが一件もない全公園」を検索するには、クライアントまたはOSM取得APIから候補OSM IDを渡す必要があります。`research_mode`指定時は他の検索条件より優先されます。
 
 #### レスポンス
 
@@ -314,7 +329,7 @@ CSVは`POST api/activity-import-csv.php`へ`app`、`csv`、`dry_run`を送りま
 | `criteria` | 既定値を補完・正規化した検索条件（`app`、`osmids`、ページ指定は含まない） |
 | `coverage` | `activities_only`または`requested_osmids` |
 | `complete` | 指定された候補OSM ID全体を評価したか。全公園を網羅した意味でも、全ページを返した意味でもありません |
-| `candidate_count` | 重複除去後の候補数。`osmids`省略時は`null` |
+| `candidate_count` | 重複除去後の候補数。`osmids`省略時は`null`。bbox指定時も入力候補数を示す |
 
 `osmids=`を明示して空にすると、候補0件として`items: []`、`candidate_count: 0`、`complete: true`になります。
 
@@ -338,7 +353,7 @@ CSVは`POST api/activity-import-csv.php`へ`app`、`csv`、`dry_run`を送りま
 | --- | --- | --- |
 | 404 | `app_not_found` | Projectが存在しない、未指定、または無効 |
 | 405 | `method_not_allowed` | GET以外の非対応メソッド |
-| 422 | `validation_failed` | 不正値、件数上限超過、未知のパラメータ（`bbox`等） |
+| 422 | `validation_failed` | 不正値、件数上限超過、未知のパラメータまたは不正な`bbox` |
 | 500 | `server_error` | サーバー内部エラー。照会用の`request_id`を返す |
 
 ```json
@@ -351,6 +366,11 @@ curl --get 'http://192.168.1.6:18080/api/activity-search.php' \
   --data-urlencode 'app=playgrounds' \
   --data-urlencode 'score_min=4' \
   --data-urlencode 'photo_only=1'
+
+# 保存済みActivityの位置で表示範囲を絞る
+curl --get 'http://192.168.1.6:18080/api/activity-search.php' \
+  --data-urlencode 'app=playgrounds' \
+  --data-urlencode 'bbox=135,34,136,35'
 
 # 候補のうち詳細情報がないもの（Activity未登録も含む）
 curl --get 'http://192.168.1.6:18080/api/activity-search.php' \
@@ -369,7 +389,7 @@ curl --get 'http://192.168.1.6:18080/api/activity-search.php' \
 
 - Projectの作成、表示名編集、有効・無効切替、削除（`app_key`は変更不可）
 - Tabulatorによるカラムの追加、削除、ドラッグ順序変更、入力型・必須・表示・編集可否・幅のセル編集（選択肢は`select` / `checkbox`型のみ編集可能）
-- `app_key`切替、全列検索、Tabulatorの列別絞り込み・並び替え・列幅変更
+- `app_key`切替、全列検索、Tabulatorの列別絞り込み（空欄は`""`を入力。通常の検索語も`"公園"`のように引用符で囲めます）・並び替え・列幅変更
 - 画面内の利用可能領域へ表を自動追従し、ページではなく表内のスクロールだけで全行・全列を移動
 - セル範囲選択、Tab / Shift+Tab・矢印キー移動、複数セルのコピー&ペースト
 - 行追加・削除を含むローカル変更の一括保存と、未保存セル・行の表示
@@ -503,7 +523,7 @@ find . -type f -name '*.php' -print0 | xargs -0 -n1 php -l
 node --check admin/admin.js
 ```
 
-Activityテストでは、JSON可変項目、Schema削除後の未知フィールド保持、アプリ分離、OSM ID絞り込み、追加・更新・削除、一括保存、投稿者記録、サーバー生成ID、Schema検証、import dry-run/upsert、Activity検索の集約・条件・候補OSM IDを確認します。Projectテストでは`app_key`の一意性・不変性、カラム順、選択肢順、Schema検証を、Project accessテストではadmin・editor・project_admin・viewer・未割り当ての境界を確認します。CSVテストではBOM、改行入りセル、必須ヘッダー、Schema候補を確認します。認証・ユーザー管理テストでは、登録、招待、role、最後のadmin保護、Project権限、監査ログ、平文パスワード非保存、確認前認証拒否、1回限りトークン、パスワード再設定、Rate Limitを確認します。
+Activityテストでは、JSON可変項目、Schema削除後の未知フィールド保持、アプリ分離、OSM ID絞り込み、追加・更新・削除、一括保存、投稿者記録、サーバー生成ID、Schema検証、import dry-run/upsert、Activity検索の集約・条件・候補OSM IDを確認します。Projectテストでは`app_key`の一意性・不変性、カラム順、選択肢順、Schema検証を、Project accessテストではadmin・editor・project_admin・viewer・未割り当ての境界を確認します。CSVテストではBOM、改行入りセル、必須ヘッダー、座標列、Schema候補を確認します。認証・ユーザー管理テストでは、登録、招待、role、最後のadmin保護、Project権限、監査ログ、平文パスワード非保存、確認前認証拒否、1回限りトークン、パスワード再設定、Rate Limitを確認します。
 
 ## 現在の実装範囲
 

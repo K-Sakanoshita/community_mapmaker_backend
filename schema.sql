@@ -49,6 +49,8 @@ CREATE TABLE activities (
     activity_key VARCHAR(128) NOT NULL,
     form_key VARCHAR(64) NULL,
     osmid VARCHAR(64) NOT NULL,
+    latitude DECIMAL(10,7) NULL,
+    longitude DECIMAL(10,7) NULL,
     data_json JSON NOT NULL,
     is_deleted TINYINT(1) NOT NULL DEFAULT 0,
     deleted_at DATETIME NULL,

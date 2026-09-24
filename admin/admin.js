@@ -456,6 +456,8 @@ function activityColumns() {
   const system = [
     { field: "id", label: "Activity ID", type: "text", admin: { width: 210 } },
     { field: "osmid", label: "OSM ID", type: "text", required: true, admin: { width: 150 } },
+    { field: "latitude", label: "緯度", type: "number", admin: { width: 140, editable: false } },
+    { field: "longitude", label: "経度", type: "number", admin: { width: 140, editable: false } },
     { field: "form_key", label: "Form", type: "text", admin: { width: 110 } },
     { field: "created_at", label: "作成日時", type: "text", admin: { width: 160, editable: false } },
     { field: "updated_at", label: "更新日時", type: "text", admin: { width: 160, editable: false } }
@@ -488,7 +490,7 @@ function renderActivityTable() {
     clipboardPasteParser: "range",
     clipboardPasteAction: "range",
     rowHeader: { resizable: false, width: 42, hozAlign: "center", formatter: "rownum", cssClass: "range-header-col", editor: false, headerSort: false, headerFilter: false },
-    columnDefaults: { resizable: "header", headerFilter: "input", headerFilterPlaceholder: "絞り込み" },
+    columnDefaults: { resizable: "header", headerFilter: "input", headerFilterPlaceholder: '絞り込み（空欄: ""）' },
     columns: [
       { field: "cmmRowKey", visible: false, headerSort: false, headerFilter: false, clipboard: false, download: false },
       { title: "操作", width: 92, minWidth: 92, headerSort: false, headerFilter: false, clipboard: false, download: false, formatter: deleteActionFormatter, cellClick: deleteActionClick },
@@ -511,7 +513,7 @@ function renderActivityTable() {
 
 function tabulatorColumn(column) {
   const definition = {
-    title: column.label || column.field,
+    title: `${column.label || column.field}${column.required ? " *" : ""}`,
     field: column.field,
     width: Number(column.admin?.width) || 150,
     minWidth: 80,
@@ -519,7 +521,7 @@ function tabulatorColumn(column) {
       && column.admin?.editable !== false
       && (column.field !== "id" || isNewActivityKey(cell.getRow().getIndex())),
     validator: column.required ? ((_cell, value) => Array.isArray(value) ? value.length > 0 : printable(value).trim() !== "") : undefined,
-    headerFilterFunc: (filterValue, rowValue) => printable(rowValue).toLocaleLowerCase().includes(printable(filterValue).trim().toLocaleLowerCase()),
+    headerFilterFunc: (filterValue, rowValue) => matchesActivitySearch(rowValue, parseActivitySearch(filterValue)),
     formatterClipboard: false,
     mutatorEdit: value => normalizeActivityValue(column, value),
     mutatorClipboard: value => normalizeActivityValue(column, value)
@@ -613,6 +615,17 @@ function printable(value) {
   return value == null ? "" : String(value);
 }
 
+function parseActivitySearch(value) {
+  const input = printable(value).trim();
+  const quoted = input.length >= 2 && input.startsWith('"') && input.endsWith('"');
+  return { term: (quoted ? input.slice(1, -1) : input).toLocaleLowerCase(), quoted };
+}
+
+function matchesActivitySearch(value, query) {
+  const text = printable(value).toLocaleLowerCase();
+  return query.quoted && query.term === "" ? text.trim() === "" : text.includes(query.term);
+}
+
 async function addActivityRow() {
   if (!canWriteActivities()) return;
   const row = { id: "", osmid: "", form_key: "", created_at: "", updated_at: "", cmmRowKey: `new-${state.nextRowKey++}` };
@@ -651,15 +664,42 @@ function toggleDelete(row, rowComponent = null, rowKey = row.cmmRowKey, newRow =
 
 function rowPayload(row) {
   const payload = { app: state.currentApp };
-  activityColumns().forEach(column => { if (!['created_at', 'updated_at'].includes(column.field)) payload[column.field] = normalizeActivityValue(column, row[column.field]); });
+  activityColumns().forEach(column => { if (!['created_at', 'updated_at', 'latitude', 'longitude'].includes(column.field)) payload[column.field] = normalizeActivityValue(column, row[column.field]); });
   return payload;
 }
 
 async function saveAll() {
   if (!canWriteActivities()) return;
-  const validation = state.activityTable?.validate();
-  if (validation !== true) { setStatus("必須項目を入力してから保存してください。", true); validation?.[0]?.getElement()?.scrollIntoView({ block: "center" }); return; }
   if (state.activityTable) state.rows = state.activityTable.getData();
+  const requiredColumns = activityColumns().filter(column => column.required);
+  const invalid = [];
+  state.rows.forEach(row => {
+    const key = String(row.cmmRowKey);
+    if (state.deletedActivityRows.has(key) || (!isNewActivityKey(key) && !state.dirtyActivityFields.has(key))) return;
+    requiredColumns.forEach(column => {
+      const value = row[column.field];
+      if (Array.isArray(value) ? value.length === 0 : printable(value).trim() === "") {
+        invalid.push({ key, id: row.id || "新しい行", field: column.field, label: column.label || column.field });
+      }
+    });
+  });
+  if (invalid.length) {
+    const first = invalid[0];
+    setStatus(`保存する行に必須項目の空欄が${invalid.length}件あります。最初のエラー: ${first.id} / ${first.label}。`, true);
+    if (state.activityTable) {
+      els.search.value = "";
+      state.activityTable.clearFilter();
+      state.activityTable.clearHeaderFilter();
+      const cell = state.activityTable.getRow(first.key)?.getCell(first.field);
+      try {
+        await state.activityTable.scrollToRow(first.key, "center", false);
+        await state.activityTable.scrollToColumn(first.field, "middle", false);
+      } catch { cell?.getElement()?.scrollIntoView({ block: "center", inline: "center" }); }
+      cell?.getElement()?.classList.add("tabulator-validation-fail");
+      cell?.edit();
+    }
+    return;
+  }
   const payload = { app: state.currentApp, creates: [], updates: [], deletes: [] };
   state.rows.forEach(row => {
     const key = String(row.cmmRowKey);
@@ -684,10 +724,10 @@ function updateDirtyControls() {
 
 function applyGlobalActivityFilter() {
   if (!state.activityTable) return;
-  const needle = els.search.value.trim().toLocaleLowerCase();
-  if (!needle) { state.activityTable.clearFilter(); return; }
+  const query = parseActivitySearch(els.search.value);
+  if (!query.quoted && !query.term) { state.activityTable.clearFilter(); return; }
   const fields = activityColumns().map(column => column.field);
-  state.activityTable.setFilter(row => fields.some(field => printable(row[field]).toLocaleLowerCase().includes(needle)));
+  state.activityTable.setFilter(row => fields.some(field => matchesActivitySearch(row[field], query)));
 }
 
 function updateExportLinks() {

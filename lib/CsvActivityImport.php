@@ -9,6 +9,7 @@ final class CsvActivityImport
 {
     private const SYSTEM_HEADERS = [
         'id' => true, 'activity_key' => true, 'osmid' => true, 'form_key' => true,
+        'latitude' => true, 'longitude' => true,
         'created_at' => true, 'updated_at' => true,
     ];
 
@@ -47,9 +48,9 @@ final class CsvActivityImport
             if (!isset(self::SYSTEM_HEADERS[$field])) $this->schema->assertKey($field, 'field');
             $logical[$normalized] = true;
         }
-        if (!isset($logical['id']) || !isset($logical['osmid'])) {
+        if (!isset($logical['id'])) {
             fclose($stream);
-            throw new ActivityValidationException(['headers' => 'CSV must contain id (or activity_key) and osmid columns.']);
+            throw new ActivityValidationException(['headers' => 'CSV must contain an id (or activity_key) column.']);
         }
 
         $rows = [];
@@ -62,7 +63,8 @@ final class CsvActivityImport
             $row = [];
             foreach ($header as $index => $field) {
                 $key = $field === 'activity_key' ? 'id' : $field;
-                $row[$key] = (string)($values[$index] ?? '');
+                $value = (string)($values[$index] ?? '');
+                $row[$key] = in_array($key, ['latitude', 'longitude'], true) && trim($value) === '' ? null : $value;
             }
             $rows[] = $row;
             if (count($rows) > 5000) {

@@ -11,6 +11,7 @@ final class ActivityService
     private const RESERVED = [
         'app' => true, 'app_key' => true, 'id' => true, 'activity_key' => true,
         'is_deleted' => true, 'deleted_at' => true,
+        'latitude' => true, 'longitude' => true,
         'form_key' => true, 'osmid' => true, 'created_at' => true, 'updated_at' => true,
     ];
 
@@ -44,10 +45,10 @@ final class ActivityService
         $generated = $activityKey === '';
         if ($generated) $activityKey = $this->generateKey($appKey);
         $this->schema->assertKey($activityKey, 'activity');
-        [$formKey, $osmid, $data] = $this->parts($appKey, $input, $migration);
+        [$formKey, $osmid, $data, $coordinates] = $this->parts($appKey, $input, $migration);
         for ($attempt = 0; ; $attempt++) {
             try {
-                return $this->flatten($this->repository->create($appKey, $activityKey, $formKey, $osmid, $data, $actorUserId));
+                return $this->flatten($this->repository->create($appKey, $activityKey, $formKey, $osmid, $data, $actorUserId, $coordinates));
             } catch (DuplicateActivityException $error) {
                 if (!$generated || $attempt >= 2) throw $error;
                 $activityKey = $this->generateKey($appKey);
@@ -64,14 +65,14 @@ final class ActivityService
         }
         $existing = $this->repository->find($appKey, $activityKey);
         if ($existing === null) throw new ActivityNotFoundException('Activity not found.');
-        [$formKey, $osmid, $data] = $this->parts($appKey, $input, $migration);
+        [$formKey, $osmid, $data, $coordinates] = $this->parts($appKey, $input, $migration);
         $schemaFields = (array)($this->schema->get($appKey)['fields'] ?? []);
         foreach ((array)$existing['data'] as $field => $value) {
-            if (!array_key_exists($field, $schemaFields) && !array_key_exists($field, $data)) {
+            if (!isset(self::RESERVED[$field]) && !array_key_exists($field, $schemaFields) && !array_key_exists($field, $data)) {
                 $data[$field] = $value;
             }
         }
-        $row = $this->repository->update($appKey, $activityKey, $formKey, $osmid, $data, $actorUserId);
+        $row = $this->repository->update($appKey, $activityKey, $formKey, $osmid, $data, $actorUserId, $coordinates);
         if ($row === null) throw new ActivityNotFoundException('Activity not found.');
         return $this->flatten($row);
     }
@@ -153,8 +154,11 @@ final class ActivityService
                 $this->schema->assertKey($activityKey, 'activity');
                 if (isset($seen[$activityKey])) throw new ActivityValidationException(['id' => 'Activity ID is duplicated in this import.']);
                 $seen[$activityKey] = true;
-                [$formKey, $osmid, $data] = $this->parts($appKey, $row, true, $dryRun ? $previewFields : null);
-                $prepared[] = compact('activityKey', 'formKey', 'osmid', 'data');
+                $existing = $this->repository->findForImport($appKey, $activityKey);
+                if (!array_key_exists('osmid', $row) && $existing !== null) $row['osmid'] = $existing['osmid'];
+                [$formKey, $osmid, $data, $coordinates] = $this->parts($appKey, $row, true, $dryRun ? $previewFields : null);
+                $hasFormKey = array_key_exists('form_key', $row);
+                $prepared[] = compact('activityKey', 'formKey', 'osmid', 'data', 'coordinates', 'hasFormKey', 'existing');
             } catch (ActivityValidationException $error) {
                 throw new ActivityValidationException(['rows.' . $index => $error->errors]);
             }
@@ -164,13 +168,20 @@ final class ActivityService
         $updated = 0;
         $apply = function () use ($appKey, $prepared, $dryRun, $actorUserId, &$created, &$updated): void {
             foreach ($prepared as $item) {
-                $exists = $this->repository->find($appKey, $item['activityKey']) !== null;
-                $exists ? $updated++ : $created++;
+                $existing = $item['existing'];
+                $existing === null ? $created++ : $updated++;
                 if ($dryRun) continue;
-                if ($exists) {
-                    $this->repository->update($appKey, $item['activityKey'], $item['formKey'], $item['osmid'], $item['data'], $actorUserId);
+                if ($existing !== null) {
+                    $data = array_replace((array)$existing['data'], $item['data']);
+                    $formKey = $item['hasFormKey'] ? $item['formKey'] : $existing['form_key'];
+                    $coordinates = $item['coordinates'];
+                    if ((int)($existing['is_deleted'] ?? 0) === 1) {
+                        $this->repository->restoreForImport($appKey, $item['activityKey'], $formKey, $item['osmid'], $data, $actorUserId, $coordinates);
+                    } else {
+                        $this->repository->update($appKey, $item['activityKey'], $formKey, $item['osmid'], $data, $actorUserId, $coordinates);
+                    }
                 } else {
-                    $this->repository->create($appKey, $item['activityKey'], $item['formKey'], $item['osmid'], $item['data'], $actorUserId);
+                    $this->repository->create($appKey, $item['activityKey'], $item['formKey'], $item['osmid'], $item['data'], $actorUserId, $item['coordinates']);
                 }
             }
         };
@@ -199,7 +210,31 @@ final class ActivityService
         }
         if (count($data) > 256) throw new ActivityValidationException(['data' => 'At most 256 fields are allowed.']);
         $this->schema->validate($appKey, $data, $migration, $fieldDefinitions);
-        return [$formKey, $osmid, $data];
+        return [$formKey, $osmid, $data, $this->coordinates($input)];
+    }
+
+    /** null means omitted; an explicit pair of nulls clears the snapshot. */
+    private function coordinates(array $input): ?array
+    {
+        $hasLatitude = array_key_exists('latitude', $input);
+        $hasLongitude = array_key_exists('longitude', $input);
+        if (!$hasLatitude && !$hasLongitude) return null;
+        if (!$hasLatitude || !$hasLongitude) {
+            throw new ActivityValidationException(['coordinates' => 'Latitude and longitude must be supplied together.']);
+        }
+        if ($input['latitude'] === null && $input['longitude'] === null) {
+            return ['latitude' => null, 'longitude' => null];
+        }
+        $result = [];
+        foreach (['latitude' => 90, 'longitude' => 180] as $field => $limit) {
+            $value = $input[$field];
+            if (!(is_int($value) || is_float($value) || (is_string($value) && is_numeric($value)))
+                || !is_finite((float)$value) || (float)$value < -$limit || (float)$value > $limit) {
+                throw new ActivityValidationException([$field => sprintf('Expected a finite number between -%d and %d.', $limit, $limit)]);
+            }
+            $result[$field] = round((float)$value, 7);
+        }
+        return $result;
     }
 
     private function validateOsmid(string $osmid): void
@@ -222,6 +257,8 @@ final class ActivityService
         $flat = [
             'id' => (string)$row['activity_key'],
             'osmid' => (string)$row['osmid'],
+            'latitude' => isset($row['latitude']) ? (float)$row['latitude'] : null,
+            'longitude' => isset($row['longitude']) ? (float)$row['longitude'] : null,
             'created_at' => (string)$row['created_at'],
             'updated_at' => (string)$row['updated_at'],
         ];

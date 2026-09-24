@@ -348,6 +348,22 @@ migrate_stack() {
         echo 'Activity soft delete migration is only partially applied; inspect the database before continuing.' >&2
         exit 1
     fi
+    local coordinate_parts
+    coordinate_parts=$(compose exec --no-TTY database \
+        mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker --batch --skip-column-names \
+        --execute="SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_schema = DATABASE() AND table_name = 'activities'
+            AND column_name IN ('latitude', 'longitude')")
+    if [[ "$coordinate_parts" == '0' ]]; then
+        compose exec --no-TTY database \
+            mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker < "$project_root/migrations/006_activity_coordinates.sql"
+        echo 'Applied migration 006_activity_coordinates.sql.'
+    elif [[ "$coordinate_parts" == '2' ]]; then
+        echo 'Activity coordinate migration is already applied.'
+    else
+        echo 'Activity coordinate migration is only partially applied; inspect the database before continuing.' >&2
+        exit 1
+    fi
 
 }
 

@@ -9,6 +9,7 @@ final class ProjectService
 {
     private const RESERVED_FIELDS = [
         'app' => true, 'app_key' => true, 'id' => true, 'activity_key' => true,
+        'latitude' => true, 'longitude' => true,
         'form_key' => true, 'osmid' => true, 'created_at' => true, 'updated_at' => true,
     ];
 

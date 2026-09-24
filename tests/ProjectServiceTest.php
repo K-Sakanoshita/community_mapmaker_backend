@@ -78,3 +78,7 @@ projectAssert(!in_array('town-map', $schema->appKeys(), true), 'Disabled project
 projectThrows(fn() => $schema->get('town-map'), CommunityMapMaker\Activity\UnknownAppException::class, 'Disabled project schemas must not be exposed through the Activity API.');
 
 echo "ProjectService behavior: ok\n";
+
+foreach (['latitude', 'longitude'] as $field) {
+    projectThrows(fn() => $service->sanitizeSchema(['fields' => [$field => ['type' => 'number']]]), ActivityValidationException::class, 'Coordinates are reserved metadata.');
+}

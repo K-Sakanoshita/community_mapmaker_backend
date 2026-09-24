@@ -28,7 +28,8 @@ csvAssert($parsed['schema_candidate']['fields']['score']['type'] === 'number', '
 csvAssert($parsed['schema_candidate']['fields']['visit_date']['type'] === 'date', 'Date columns must be inferred.');
 csvAssert($parsed['schema_candidate']['fields']['link']['type'] === 'url', 'URL columns must be inferred.');
 csvThrows(fn() => $parser->parse('town-map', "id,activity_key,osmid\nA/1,A/1,node/1\n"), 'Logical duplicate ID headers must be rejected.');
-csvThrows(fn() => $parser->parse('town-map', "id,title\nA/1,x\n"), 'Required osmid header must be rejected.');
+$partial = $parser->parse('town-map', "id,title\nA/1,x\n");
+csvAssert(!array_key_exists('osmid', $partial['rows'][0]), 'Omitted OSM ID must stay omitted for existing-row import.');
 
 $legacySchema = new ActivitySchema(['playgrounds' => ['schema' => ['fields' => [
     'actdate' => ['label' => '投稿日', 'type' => 'date', 'order' => 0],
@@ -45,5 +46,11 @@ csvAssert($legacy['schema_candidate']['fields']['score']['options'] === ['act_sc
 csvAssert($legacy['schema_candidate']['fields']['good_points']['options'] === ['act_good_points_1', 'act_good_points_10'], 'Observed checkbox values must extend the schema candidate.');
 csvAssert($legacy['schema_candidate']['fields']['picture_url1']['type'] === 'wikimedia', 'URL fields containing File references must become Wikimedia candidates.');
 csvAssert($legacy['schema_update_fields'] === ['new_date', 'score', 'good_points', 'picture_url1'], 'Missing and changed fields must be listed for schema application.');
+
+$coordinates = $parser->parse('town-map', "id,osmid,latitude,longitude\nC/1,node/1,34.8512345,135.6178901\nC/2,node/2,,\n");
+csvAssert($coordinates['schema_candidate']['fields'] === [] && $coordinates['missing_fields'] === [], 'Coordinate columns must not become schema fields.');
+csvAssert($coordinates['rows'][0]['latitude'] === '34.8512345', 'CSV must preserve coordinate precision for validation.');
+csvAssert($coordinates['rows'][1]['latitude'] === null && $coordinates['rows'][1]['longitude'] === null, 'Empty coordinate cells must normalize to null.');
+csvAssert(!array_key_exists('latitude', $parsed['rows'][0]), 'Legacy CSV leaves coordinates omitted.');
 
 echo "CsvActivityImport behavior: ok\n";

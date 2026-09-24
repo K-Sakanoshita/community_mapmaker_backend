@@ -23,6 +23,8 @@ h1 { margin: 2px 0 0; font-size: clamp(1.3rem, 2.5vw, 1.8rem); }
 .login-status.error { color: #a31d1d; font-weight: 700; }
 .login-status.success { color: #08784f; font-weight: 700; }
 main { width: 100%; max-width: 1700px; margin: 0 auto; padding: 10px clamp(6px, 1.5vw, 20px); }
+.activity-required-note { margin: 4px 0 0; color: #5a6e65; font-size: .82rem; }
+.activity-required-note span { color: var(--danger); font-weight: 700; }
 .section-desc { margin: 4px 0 14px; color: #5a6e65; font-size: .9rem; }
 textarea { resize: vertical; }
 .projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; }

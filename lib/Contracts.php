@@ -64,8 +64,15 @@ interface ActivityRepositoryInterface
 {
     public function list(string $appKey, ?string $osmid = null): array;
     public function find(string $appKey, string $activityKey): ?array;
-    public function create(string $appKey, string $activityKey, ?string $formKey, string $osmid, array $data, ?int $createdByUserId = null): array;
-    public function update(string $appKey, string $activityKey, ?string $formKey, string $osmid, array $data, ?int $updatedByUserId = null): ?array;
+    /** Include a soft-deleted row when matching an import key. */
+    public function findForImport(string $appKey, string $activityKey): ?array;
+    public function restoreForImport(string $appKey, string $activityKey, ?string $formKey, string $osmid, array $data, ?int $updatedByUserId = null, ?array $coordinates = null): ?array;
+    /** @param array{latitude: ?float, longitude: ?float}|null $coordinates */
+    public function create(string $appKey, string $activityKey, ?string $formKey, string $osmid, array $data, ?int $createdByUserId = null, ?array $coordinates = null): array;
+    /** Omitted coordinates preserve the snapshot; an explicit null pair clears it.
+     * @param array{latitude: ?float, longitude: ?float}|null $coordinates
+     */
+    public function update(string $appKey, string $activityKey, ?string $formKey, string $osmid, array $data, ?int $updatedByUserId = null, ?array $coordinates = null): ?array;
     public function delete(string $appKey, string $activityKey): bool;
 }
 

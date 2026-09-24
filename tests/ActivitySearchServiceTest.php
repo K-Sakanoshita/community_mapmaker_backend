@@ -20,8 +20,10 @@ final class SearchMemoryRepository implements ActivityRepositoryInterface
         ));
     }
     public function find(string $appKey, string $activityKey): ?array { return null; }
-    public function create(string $appKey, string $activityKey, ?string $formKey, string $osmid, array $data, ?int $createdByUserId = null): array { return []; }
-    public function update(string $appKey, string $activityKey, ?string $formKey, string $osmid, array $data, ?int $updatedByUserId = null): ?array { return null; }
+    public function findForImport(string $appKey, string $activityKey): ?array { return null; }
+    public function restoreForImport(string $appKey, string $activityKey, ?string $formKey, string $osmid, array $data, ?int $updatedByUserId = null, ?array $coordinates = null): ?array { return null; }
+    public function create(string $appKey, string $activityKey, ?string $formKey, string $osmid, array $data, ?int $createdByUserId = null, ?array $coordinates = null): array { return []; }
+    public function update(string $appKey, string $activityKey, ?string $formKey, string $osmid, array $data, ?int $updatedByUserId = null, ?array $coordinates = null): ?array { return null; }
     public function delete(string $appKey, string $activityKey): bool { return false; }
 }
 
@@ -96,6 +98,20 @@ searchAssert($missing['complete'] && $missing['coverage'] === 'requested_osmids'
 searchAssert($missing['candidate_count'] === 2 && $missing['pagination']['total'] === 2, 'Missing mode must include candidates without activities.');
 searchAssert(in_array(0, array_column($missing['items'], 'activity_count'), true), 'An OSM ID without activities must have an empty summary.');
 
+$bboxRows = $rows;
+$bboxRows[0]['latitude'] = 35.0; $bboxRows[0]['longitude'] = 135.0;
+$bboxRows[1]['latitude'] = 36.0; $bboxRows[1]['longitude'] = 136.0;
+$bboxRows[2]['latitude'] = 35.5; $bboxRows[2]['longitude'] = 135.5;
+$bboxService = new ActivitySearchService(new SearchMemoryRepository($bboxRows), $schema, $apps);
+$bounded = $bboxService->search('playgrounds', ['bbox' => '135,35,135.5,35.5']);
+searchAssert(array_column($bounded['items'], 'osmid') === ['node/200', 'way/100'], 'BBOX must include boundaries and exclude missing coordinates.');
+searchAssert($bounded['items'][1]['activity_count'] === 1 && $bounded['items'][1]['score'] === 3.0, 'BBOX must filter activities before aggregation.');
+$boundedCandidates = $bboxService->search('playgrounds', ['bbox' => '135,35,135.5,35.5', 'osmids' => 'way/100,relation/400']);
+searchAssert(!$boundedCandidates['complete'] && $boundedCandidates['coverage'] === 'activities_only' && $boundedCandidates['pagination']['total'] === 1, 'BBOX cannot locate candidates without saved coordinates.');
+foreach (['135,35,135', '136,35,135,36', '135,91,136,92', 'NaN,35,136,36', '135,35,136,36,37'] as $invalidBbox) {
+    searchThrows(fn() => $bboxService->search('playgrounds', ['bbox' => $invalidBbox]), 'bbox');
+}
+
 $global = $service->search('playgrounds', ['photo_only' => true, 'per_page' => 1]);
 searchAssert(!$global['complete'] && $global['coverage'] === 'activities_only', 'Global search must disclose incomplete park coverage.');
 searchAssert($global['pagination']['total'] === 1 && count($global['items']) === 1, 'Photo filtering and pagination must be applied.');
@@ -112,7 +128,7 @@ searchAssert($page['pagination']['total'] === 3 && count($page['items']) === 1 &
 $priority = $service->search('playgrounds', ['research_mode' => 'missing', 'score_min' => 5, 'photo_only' => true]);
 searchAssert(array_column($priority['items'], 'osmid') === ['way/300'], 'Research mode must override normal filters.');
 searchAssert($service->search('playgrounds', ['attributes' => '123'])['pagination']['total'] === 0, 'Numeric attribute tokens must not cause a type error.');
-foreach (['bbox' => '1,2,3,4', 'page' => 1000001, 'score_min' => [], 'attributes' => [['nested']], 'osmids' => ['key' => 'way/1']] as $field => $value) {
+foreach (['unknown' => '1,2,3,4', 'page' => 1000001, 'score_min' => [], 'attributes' => [['nested']], 'osmids' => ['key' => 'way/1']] as $field => $value) {
     searchThrows(fn() => $service->search('playgrounds', [$field => $value]), $field);
 }
 $malformed = new ActivitySearchService(new SearchMemoryRepository([

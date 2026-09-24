@@ -30,6 +30,13 @@ $throws = static function (callable $fn, string $class) use ($check): void {
     try { $fn(); } catch (Throwable $e) { $check($e instanceof $class, get_class($e)); return; }
     throw new RuntimeException('Expected ' . $class);
 };
+// Rebuild the pre-migration shape in this connection's temporary table.
+$pdo->exec('ALTER TABLE activities DROP COLUMN latitude, DROP COLUMN longitude');
+$pdo->exec("INSERT INTO activities (app_key, activity_key, osmid, data_json, created_at, updated_at) VALUES ('migration-test', 'old/1', 'node/1', '{}', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+$pdo->exec(file_get_contents(dirname(__DIR__) . '/migrations/006_activity_coordinates.sql'));
+$old = $pdo->query("SELECT latitude, longitude FROM activities WHERE app_key='migration-test'")->fetch();
+$check($old === ['latitude' => null, 'longitude' => null], 'Migration must leave existing snapshots null');
+$pdo->exec("DELETE FROM activities WHERE app_key='migration-test'");
 require_once dirname(__DIR__) . '/lib/AdminUserRepository.php';
 $adminRepo = new CommunityMapMaker\Auth\AdminUserRepository($pdo);
 $userId = (int)$pdo->query('SELECT id FROM users LIMIT 1')->fetchColumn();
@@ -72,7 +79,12 @@ $throws(fn() => $service->update('test/1', $input), ActivityNotFoundException::c
 $throws(fn() => $service->delete('test', 'test/1'), ActivityNotFoundException::class);
 $check($repo->update('test', 'test/1', null, 'node/999', []) === null, 'Direct update revived row');
 $throws(fn() => $service->create($input), DuplicateActivityException::class);
-$throws(fn() => $service->import('test', [$input], false), DuplicateActivityException::class);
+$check($service->import('test', [$input], true)['updated'] === 1, 'Deleted key must preview as update');
+$check($service->import('test', [$input], false)['updated'] === 1, 'Import must restore deleted key');
+$restored = $repo->find('test', 'test/1');
+$check($restored !== null && $restored['data']['body'] === 'preserve me', 'Restored row must retain data');
+$check((int)$pdo->query("SELECT is_deleted FROM activities WHERE app_key='test' AND activity_key='test/1'")->fetchColumn() === 0, 'Import did not clear deletion flag');
+$service->delete('test', 'test/1');
 $check($search->search('test', [])['pagination']['total'] === 0, 'Search includes deleted row');
 $missing = $search->search('test', ['osmids' => ['node/123'], 'research_mode' => 'missing']);
 $check($missing['items'][0]['activity_count'] === 0, 'Missing search counts deleted row');
@@ -81,4 +93,21 @@ $throws(fn() => $service->batch('test', [], [], ['test/2', 'test/missing']), Act
 $check($repo->find('test', 'test/2') !== null, 'Batch rollback lost active row');
 $service->batch('test', [], [], ['test/2']);
 $check($repo->find('test', 'test/2') === null, 'Batch failed to delete');
+$coordinateInput = ['app' => 'test', 'id' => 'test/coords', 'osmid' => 'way/1'];
+$legacy = $service->create($coordinateInput);
+$check($legacy['latitude'] === null && $legacy['longitude'] === null, 'Legacy row coordinates');
+$located = $service->update('test/coords', $coordinateInput + ['latitude' => 34.8512345, 'longitude' => 135.6178901]);
+$check($located['latitude'] === 34.8512345 && $located['longitude'] === 135.6178901, 'Decimal coordinates must round-trip as numbers');
+$stored = $pdo->query("SELECT latitude, longitude, data_json FROM activities WHERE activity_key='test/coords'")->fetch();
+$check($stored['latitude'] === '34.8512345' && !str_contains($stored['data_json'], 'latitude'), 'Coordinates belong to DECIMAL columns');
+$kept = $service->update('test/coords', $coordinateInput);
+$check($kept['latitude'] === $located['latitude'], 'SQL update preserves omitted snapshot');
+$service->import('test', [$coordinateInput], false);
+$check($service->find('test', 'test/coords')['longitude'] === $located['longitude'], 'SQL import preserves omitted snapshot');
+$service->batch('test', [], [$coordinateInput + ['latitude' => -90, 'longitude' => 180]], []);
+$check($service->list('test', 'way/1')[0]['longitude'] === 180.0, 'SQL batch updates and list exposes coordinates');
+$throws(fn() => $service->batch('test', [], [$coordinateInput + ['latitude' => 1, 'longitude' => 2]], ['missing']), ActivityNotFoundException::class);
+$check($service->find('test', 'test/coords')['longitude'] === 180.0, 'Failed batch rolls back coordinate updates');
+$cleared = $service->update('test/coords', $coordinateInput + ['latitude' => null, 'longitude' => null]);
+$check($cleared['latitude'] === null && $cleared['longitude'] === null, 'SQL clears explicit null pair');
 echo "ActivityRepository tests passed.\n";
