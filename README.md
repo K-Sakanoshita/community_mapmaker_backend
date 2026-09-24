@@ -365,6 +365,8 @@ curl --get 'http://192.168.1.6:18080/api/activity-search.php' \
 
 `admin/index.html`を開き、独立したログイン画面から有効なユーザーのHTTP Basic認証情報でログインします。認証成功後にだけコンソールを表示し、ログアウトするとパスワードと画面上の管理データを破棄してログイン画面へ戻ります。`admin`はProject一覧、カラム定義、Activity表、ユーザー管理を利用できます。一般ユーザーには割り当て済みProjectのActivity表だけを表示し、`editor` / `project_admin`は編集可能、`viewer`は閲覧のみです。Activity Schemaの`type`に応じて`text`、`textarea`、`number`、`date`、`select`、`checkbox`、`url`、`wikimedia`の編集欄を生成します。MIT LicenseのTabulator 6.5.2を採用し、CSS/JavaScriptはバージョンとSRIハッシュを固定してUNPKGから読み込みます。
 
+管理画面のフォーム、ボタン、表、カードなどはBootstrap 5.3.3を使用します。BootstrapのCSSはバージョンを固定してjsDelivrから読み込み、モーダル用のJavaScriptは`admin/vendor/bootstrap.bundle.min.js`を同一オリジンから読み込みます。表のスクロールやTabulator固有の表示などには`admin/admin.css`を使用します。操作結果やエラーはBootstrapの通知モーダルで表示しますが、ログイン成功時とProject・Activity・ユーザー一覧の通常の読み込み完了時には開きません。
+
 - Projectの作成、表示名編集、有効・無効切替、削除（`app_key`は変更不可）
 - Tabulatorによるカラムの追加、削除、ドラッグ順序変更、入力型・必須・表示・編集可否・幅のセル編集（選択肢は`select` / `checkbox`型のみ編集可能）
 - `app_key`切替、全列検索、Tabulatorの列別絞り込み・並び替え・列幅変更
