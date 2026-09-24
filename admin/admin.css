@@ -1,18 +1,16 @@
 :root { color-scheme: light; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #17251f; background: #f3f6f4; --accent: #08784f; --line: #ccd8d1; --danger: #bd3232; --warning: #fff3b5; }
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; }
+[hidden] { display: none !important; }
 header { display: flex; align-items: center; justify-content: space-between; gap: 24px; color: white; background: #173f32; padding: 14px clamp(16px, 3vw, 40px); }
-.header-right, .session-actions, .nav-tabs, .button-row, .project-settings { display: flex; align-items: center; gap: 10px; }
+.header-right, .session-actions { display: flex; align-items: center; gap: 10px; }
 h1 { margin: 2px 0 0; font-size: clamp(1.3rem, 2.5vw, 1.8rem); }
 .eyebrow { margin: 0; color: #adddca; font-size: .75rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-.nav-tabs { padding: 4px; border-radius: 8px; background: rgb(0 0 0 / .2); }
-.tab-btn { color: #d1e4dc; border-color: transparent; background: transparent; }
-.tab-btn.active { color: white; background: var(--accent); }
 .session-user { color: #d1e4dc; font-size: .82rem; font-weight: 700; }
-.session-actions button { min-height: 32px; color: #17251f; }
+.session-actions button { min-height: 32px; color: #fff; }
 .login-screen { display: grid; min-height: 100dvh; place-items: center; padding: 24px; background: radial-gradient(circle at top, #e1f2ea 0, #f3f6f4 48%, #e7eeea 100%); }
 .login-screen[hidden], #adminHeader[hidden], #adminMain[hidden] { display: none !important; }
-.login-card { width: min(100%, 420px); padding: clamp(24px, 5vw, 38px); border: 1px solid var(--line); border-radius: 14px; background: white; box-shadow: 0 18px 50px rgb(23 63 50 / .15); }
+.login-card { width: min(100%, 420px); }
 .login-brand { margin-bottom: 24px; text-align: center; }
 .login-brand .eyebrow { color: var(--accent); }
 .login-brand h1 { margin: 5px 0 8px; color: #173f32; font-size: clamp(1.6rem, 4vw, 2rem); }
@@ -25,28 +23,13 @@ h1 { margin: 2px 0 0; font-size: clamp(1.3rem, 2.5vw, 1.8rem); }
 .login-status.error { color: #a31d1d; font-weight: 700; }
 .login-status.success { color: #08784f; font-weight: 700; }
 main { width: 100%; max-width: 1700px; margin: 0 auto; padding: 10px clamp(6px, 1.5vw, 20px); }
-#status { min-height: 1.5em; margin: 0 0 14px; color: #465c52; }
-#status.error { color: #a31d1d; font-weight: 700; }
-#status.success { color: #08784f; font-weight: 700; }
-.section-header { display: flex; align-items: start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-.section-header h2 { margin: 0; font-size: 1.4rem; }
 .section-desc { margin: 4px 0 14px; color: #5a6e65; font-size: .9rem; }
-.project-badge { display: inline-block; margin-bottom: 4px; padding: 2px 8px; border-radius: 4px; color: #173f32; background: #e0ece5; font-family: ui-monospace, monospace; font-size: .78rem; font-weight: 700; }
-input, select, textarea, button, .button { min-height: 36px; border: 1px solid #aabbb2; border-radius: 6px; padding: 6px 10px; color: inherit; background: white; font: inherit; }
 textarea { resize: vertical; }
-button, .button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; font-weight: 650; text-decoration: none; }
-button.primary, .button.primary { color: white; border-color: var(--accent); background: var(--accent); }
-button.secondary, .button.secondary { color: #233e33; background: white; }
-button.danger { color: #9c2020; border-color: var(--danger); background: white; }
-button:disabled { cursor: not-allowed; opacity: .45; }
 .projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; }
-.project-card { display: flex; flex-direction: column; justify-content: space-between; gap: 14px; padding: 18px; border: 1px solid var(--line); border-radius: 9px; background: white; box-shadow: 0 2px 5px rgb(0 0 0 / .04); }
 .project-card h3 { margin: 0 0 7px; }
 .project-card .key { padding: 2px 6px; border-radius: 4px; color: #49685a; background: #eef3f0; font-family: ui-monospace, monospace; font-size: .82rem; }
 .project-card-meta { margin: 9px 0 0; color: #66736d; font-size: .85rem; }
 .project-card-actions { display: flex; flex-wrap: wrap; gap: 7px; }
-.pagination, .user-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; margin-top: 12px; }
-.users-table td { white-space: nowrap; }
 .status-badge { display: inline-block; min-width: 72px; padding: 3px 7px; border-radius: 999px; text-align: center; font-size: .78rem; font-weight: 700; background: #e5ece8; }
 .status-badge.active { color: #076241; background: #d9f3e8; }
 .status-badge.pending { color: #765b00; background: #fff1b8; }
@@ -61,32 +44,22 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .project-assignment label { display: flex; align-items: center; gap: 7px; }
 .recent-activities { max-height: 160px; overflow: auto; padding-left: 22px; }
 .empty-state { min-height: 140px; place-items: center; padding: 32px; border: 1px dashed #9caf9f; border-radius: 8px; color: #5a6e65; }
-.project-settings { flex-wrap: wrap; margin-bottom: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: white; }
 .project-settings label:not(.check-label) { display: grid; flex: 1; gap: 4px; min-width: 240px; font-size: .82rem; font-weight: 700; }
 .check-label { display: flex; align-items: center; gap: 7px; }
 .check-label input { min-height: auto; }
-.table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 7px; background: white; }
 .spreadsheet-wrap { height: calc(100vh - 260px); min-height: 360px; border: 1px solid var(--line); border-radius: 7px; background: white; overflow: hidden; }
 body.activity-spreadsheet-view { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
 body.activity-spreadsheet-view > header { flex: 0 0 auto; }
 body.activity-spreadsheet-view > main { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; width: 100%; max-width: none; }
-body.activity-spreadsheet-view #status { flex: 0 0 auto; }
 body.activity-spreadsheet-view #activitiesView { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
 body.activity-spreadsheet-view #activitiesView > .section-header,
 body.activity-spreadsheet-view #activitiesView > .toolbar { flex: 0 0 auto; }
 body.activity-spreadsheet-view .spreadsheet-wrap { flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; max-width: 100%; height: auto; }
-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; }
-th, td { padding: 6px 8px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); vertical-align: middle; }
-th { position: sticky; top: 0; z-index: 2; text-align: left; white-space: nowrap; background: #e7f0eb; font-size: .84rem; }
 .filter-row th { top: 38px; padding: 4px; background: #f0f6f2; }
 .filter-row input { width: 100%; min-width: 80px; min-height: 28px; font-size: .8rem; }
-th:last-child, td:last-child { position: sticky; right: 0; z-index: 1; background: white; box-shadow: -2px 0 4px rgb(0 0 0 / .06); }
-th:last-child { z-index: 3; background: #e7f0eb; }
 .columns-table-wrap { height: clamp(360px, 58dvh, 620px); border: 1px solid var(--line); border-radius: 7px; background: white; overflow: hidden; }
-.toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 9px; margin-bottom: 12px; }
-.toolbar label:not(.button) { display: grid; gap: 3px; font-size: .78rem; font-weight: 700; }
+.toolbar label:not(.btn) { display: grid; gap: 3px; font-size: .78rem; font-weight: 700; }
 .toolbar .search { flex: 1 1 220px; }
-.toolbar .search input { width: 100%; }
 .import input { display: none; }
 #activityTable.tabulator, #columnsTable.tabulator { color: #17251f; border-color: var(--line); background: white; font-size: .86rem; }
 #activityTable .tabulator-header, #columnsTable .tabulator-header { color: #173f32; border-bottom-color: var(--line); background: #e7f0eb; }
@@ -114,18 +87,14 @@ th:last-child { z-index: 3; background: #e7f0eb; }
 #columnsTable .tabulator-validation-fail { background: #ffe0e0; }
 #columnsTable .tabulator-row-handle { cursor: grab; }
 #columnsTable .column-delete-button { min-height: 28px; padding: 3px 8px; font-size: .78rem; }
-dialog.modal { width: min(92vw, 560px); padding: 24px; border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 12px 35px rgb(0 0 0 / .25); }
-dialog.modal::backdrop { background: rgb(0 0 0 / .45); }
-.form-group { display: grid; gap: 6px; margin-bottom: 14px; font-size: .86rem; font-weight: 700; }
+dialog.app-dialog { width: min(92vw, 560px); padding: 24px; border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 12px 35px rgb(0 0 0 / .25); }
+dialog.app-dialog::backdrop { background: rgb(0 0 0 / .45); }
 .password-fields { margin-bottom: 14px; padding: 14px 14px 1px; border: 1px solid var(--line); border-radius: 7px; background: #f7faf8; }
 .password-fields[hidden] { display: none; }
 .password-reset-panel { margin-top: 16px; }
 .password-reset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .password-reset-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .password-reset-actions p { margin: 0; }
-.hint { color: #66736d; font-size: .8rem; font-weight: 400; }
 #csvMissing { white-space: pre-line; }
-.req { color: var(--danger); }
-.modal-actions { display: flex; justify-content: end; gap: 9px; margin-top: 18px; }
 @media (max-width: 950px) { header { align-items: stretch; flex-direction: column; } .header-right { align-items: stretch; flex-direction: column; } .session-actions { justify-content: space-between; } .nav-tabs { overflow-x: auto; } .spreadsheet-wrap { height: calc(100vh - 340px); } body.activity-spreadsheet-view .spreadsheet-wrap { height: auto; } }
 @media (max-width: 540px) { .login-screen { padding: 14px; } .section-header { align-items: stretch; flex-direction: column; } .button-row { flex-wrap: wrap; } .user-edit-grid, .password-reset-grid { grid-template-columns: 1fr; } .password-reset-actions { align-items: stretch; flex-direction: column; } .project-assignment { grid-template-columns: 1fr; } }

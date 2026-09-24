@@ -15,7 +15,7 @@ const state = {
 };
 const ids = [
   "loginScreen", "loginForm", "loginStatus", "userid", "password", "connectButton", "adminHeader", "adminMain", "currentAdmin", "logoutButton",
-  "status", "projectsGrid", "newProjectButton",
+  "status", "statusModal", "projectsGrid", "newProjectButton",
   "columnsProjectKey", "projectName", "projectEnabled", "columnsTable", "addColumnButton", "saveColumnsButton",
   "activitiesProjectKey", "appSelect", "search", "loadButton", "addButton", "discardButton", "saveAllButton", "dirtyCount",
   "jsonExport", "csvExport", "importFile", "activityTable", "projectDialog", "projectForm",
@@ -29,10 +29,20 @@ const ids = [
 ];
 const els = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
 
-function setStatus(message, error = false) {
+let statusReturnDialog = null;
+
+function setStatus(message, error = false, showModal = true) {
   els.status.textContent = message;
-  els.status.classList.toggle("error", error);
-  els.status.classList.toggle("success", !error && !/中|してください/.test(message));
+  els.status.classList.toggle("text-danger", error);
+  els.status.classList.toggle("text-success", !error && !/中|してください/.test(message));
+  if (!showModal || !message || /中…$/.test(message)) return;
+  document.getElementById("statusModalTitle").textContent = error ? "エラー" : "お知らせ";
+  const openDialog = document.querySelector("dialog[open]");
+  if (openDialog) {
+    statusReturnDialog = openDialog;
+    openDialog.close();
+  }
+  bootstrap.Modal.getOrCreateInstance(els.statusModal).show();
 }
 
 function setLoginStatus(message, error = false) {
@@ -60,6 +70,8 @@ async function logout() {
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
   document.body.classList.remove("activity-spreadsheet-view");
   els.adminHeader.hidden = true; els.adminMain.hidden = true; els.loginScreen.hidden = false;
+  statusReturnDialog = null;
+  bootstrap.Modal.getInstance(els.statusModal)?.hide();
   els.currentAdmin.textContent = ""; els.password.value = ""; els.status.textContent = "";
   document.querySelectorAll('[data-view="columns"], [data-view="activities"], [data-view="users"]').forEach(button => { button.disabled = true; });
   els.newProjectButton.disabled = true; els.newUserButton.disabled = true;
@@ -158,7 +170,7 @@ async function connect(restore = false) {
     if (isAdmin()) renderProjects();
     populateProjectSelect();
     showAdminConsole();
-    setStatus(`${state.projects.length}件のProjectを読み込みました。`);
+    setStatus(`${state.projects.length}件のProjectを読み込みました。`, false, false);
     if (!isAdmin()) state.view = "activities";
     showView(state.view, true);
   } catch (error) {
@@ -176,7 +188,7 @@ function renderProjects() {
   els.projectsGrid.className = "projects-grid";
   els.projectsGrid.replaceChildren(...state.projects.map(project => {
     const card = document.createElement("article");
-    card.className = "project-card";
+    card.className = "project-card card shadow-sm p-3 d-flex flex-column justify-content-between gap-3";
     const fieldCount = Object.keys(project.schema?.fields || {}).length;
     const header = document.createElement("div");
     header.className = "project-card-header";
@@ -199,7 +211,7 @@ function renderProjects() {
 
 function actionButton(label, handler, className = "secondary") {
   const button = document.createElement("button");
-  button.type = "button"; button.textContent = label; button.className = className; button.addEventListener("click", handler);
+  button.type = "button"; button.textContent = label; button.className = `btn btn-sm ${className === "primary" ? "btn-success" : className === "danger" ? "btn-outline-danger" : "btn-outline-secondary"}`; button.addEventListener("click", handler);
   return button;
 }
 
@@ -326,7 +338,7 @@ function renderColumnsTable() {
         editable: cell => optionFieldTypes.has(printable(cell.getRow().getData().type)),
         formatter: "textarea", variableHeight: true, width: 300, minWidth: 200 },
       { title: "操作", headerSort: false, width: 86, minWidth: 86, formatter: () => {
-        const button = document.createElement("button"); button.type = "button"; button.className = "danger column-delete-button"; button.textContent = "削除"; return button;
+        const button = document.createElement("button"); button.type = "button"; button.className = "btn btn-sm btn-outline-danger column-delete-button"; button.textContent = "削除"; return button;
       }, cellClick: (_event, cell) => {
         if (!confirm("このカラムをSchemaから外しますか？既存ActivityのJSON値は保持されます。")) return;
         cell.getRow().delete(); markSchemaDirty();
@@ -430,13 +442,13 @@ async function loadActivities(force = false) {
   }
   state.schema = project.schema || { fields: {} }; els.search.value = "";
   els.activitiesProjectKey.textContent = `${project.app_key}${project.access_role && project.access_role !== "admin" ? ` / ${project.access_role}` : ""}`; els.appSelect.value = project.app_key;
-  setStatus("Activitiesを読み込み中…");
+  setStatus("Activitiesを読み込み中…", false, false);
   try {
     const rows = await request(`activities.php?app=${encodeURIComponent(state.currentApp)}`);
     state.newActivityRows.clear(); state.deletedActivityRows.clear(); state.dirtyActivityFields.clear();
     state.rows = rows.map(row => ({ ...row, cmmRowKey: `saved-${row.id}` }));
     updateExportLinks(); renderActivityTable(); updateDirtyControls();
-    setStatus(`${rows.length}件のActivityを読み込みました。${canWriteActivities(project) ? "" : " このProjectは閲覧のみです。"}`);
+    setStatus(`${rows.length}件のActivityを読み込みました。${canWriteActivities(project) ? "" : " このProjectは閲覧のみです。"}`, false, false);
   } catch (error) { setStatus(`読み込みに失敗しました: ${error.message}`, true); }
 }
 
@@ -560,7 +572,7 @@ function deleteActionFormatter(cell) {
   const button = document.createElement("button");
   const deleted = state.deletedActivityRows.has(key); const newRow = isNewActivityKey(key);
   button.dataset.rowKey = key; button.dataset.newRow = String(newRow);
-  button.type = "button"; button.className = `activity-delete-button ${deleted ? "secondary" : "danger"}`;
+  button.type = "button"; button.className = `btn btn-sm activity-delete-button ${deleted ? "btn-outline-secondary" : "btn-outline-danger"}`;
   button.textContent = deleted ? "元に戻す" : (newRow ? "破棄" : "削除");
   return button;
 }
@@ -744,11 +756,11 @@ async function loadUsers(resetPage = false) {
   if (els.userVerifiedFilter.value) params.set("verified", els.userVerifiedFilter.value);
   if (els.userRoleFilter.value) params.set("role", els.userRoleFilter.value);
   if (els.userProjectFilter.value) params.set("project_id", els.userProjectFilter.value);
-  setStatus("ユーザー一覧を読み込み中…");
+  setStatus("ユーザー一覧を読み込み中…", false, false);
   try {
     const result = await request(`admin-users.php?${params}`);
     state.users = result.items; state.userPagination = result.pagination; renderUsers();
-    setStatus(`${result.pagination.total}件のユーザーを読み込みました。`);
+    setStatus(`${result.pagination.total}件のユーザーを読み込みました。`, false, false);
   } catch (error) { setStatus(`ユーザー一覧の取得に失敗しました: ${error.message}`, true); }
 }
 
@@ -909,6 +921,10 @@ function escapeAttribute(value) { return escapeHtml(value).replace(/"/g, "&quot;
 els.loginForm.addEventListener("submit", event => { event.preventDefault(); connect(); });
 els.logoutButton.addEventListener("click", logout);
 document.querySelectorAll("[data-view]").forEach(button => button.addEventListener("click", () => showView(button.dataset.view)));
+els.statusModal.addEventListener("hidden.bs.modal", () => {
+  if (statusReturnDialog && !els.adminMain.hidden) statusReturnDialog.showModal();
+  statusReturnDialog = null;
+});
 document.querySelectorAll("[data-close-dialog]").forEach(button => button.addEventListener("click", () => document.getElementById(button.dataset.closeDialog).close()));
 els.newProjectButton.addEventListener("click", () => els.projectDialog.showModal());
 els.newAppKey.addEventListener("input", () => {
