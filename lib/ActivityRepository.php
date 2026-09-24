@@ -29,6 +29,31 @@ final class ActivityRepository implements ActivityRepositoryInterface
         return array_map(fn(array $row): array => $this->decode($row), $statement->fetchAll());
     }
 
+    public function searchRows(string $appKey, ?array $bbox = null, ?array $osmids = null): array
+    {
+        if ($osmids === []) return [];
+        $sql = 'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at '
+            . 'FROM activities WHERE is_deleted = 0 AND app_key = :app_key';
+        $params = [':app_key' => $appKey];
+        if ($bbox !== null) {
+            $sql .= ' AND longitude BETWEEN :west AND :east AND latitude BETWEEN :south AND :north';
+            [$params[':west'], $params[':south'], $params[':east'], $params[':north']] = $bbox;
+        }
+        if ($osmids !== null) {
+            $placeholders = [];
+            foreach ($osmids as $index => $osmid) {
+                $placeholder = ':osmid_' . $index;
+                $placeholders[] = $placeholder;
+                $params[$placeholder] = $osmid;
+            }
+            $sql .= ' AND osmid IN (' . implode(', ', $placeholders) . ')';
+        }
+        $sql .= ' ORDER BY updated_at DESC, id DESC';
+        $statement = $this->pdo->prepare($sql);
+        $statement->execute($params);
+        return array_map(fn(array $row): array => $this->decode($row), $statement->fetchAll());
+    }
+
     public function find(string $appKey, string $activityKey): ?array
     {
         $statement = $this->pdo->prepare(

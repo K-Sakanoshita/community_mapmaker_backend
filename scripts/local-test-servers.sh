@@ -364,6 +364,22 @@ migrate_stack() {
         echo 'Activity coordinate migration is only partially applied; inspect the database before continuing.' >&2
         exit 1
     fi
+    local bbox_index_count
+    bbox_index_count=$(compose exec --no-TTY database \
+        mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker --batch --skip-column-names \
+        --execute="SELECT COUNT(*) FROM information_schema.statistics
+            WHERE table_schema = DATABASE() AND table_name = 'activities'
+            AND index_name = 'idx_activities_app_active_lon_lat'")
+    if [[ "$bbox_index_count" == '0' ]]; then
+        compose exec --no-TTY database \
+            mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker < "$project_root/migrations/007_activity_bbox_index.sql"
+        echo 'Applied migration 007_activity_bbox_index.sql.'
+    elif [[ "$bbox_index_count" == '4' ]]; then
+        echo 'Activity BBOX index migration is already applied.'
+    else
+        echo 'Activity BBOX index migration is only partially applied; inspect the database before continuing.' >&2
+        exit 1
+    fi
 
 }
 

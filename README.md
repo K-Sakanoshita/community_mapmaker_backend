@@ -28,7 +28,7 @@ schema.sql
 
 ## セットアップ
 
-1. MySQLにデータベースを作り、`schema.sql`を適用します。認証テーブル導入済みのDBには`migrations/001_activity_core.sql`、`migrations/002_projects_core.sql`、`migrations/003_admin_users.sql`、`migrations/004_optional_user_email.sql`、`migrations/005_activity_soft_delete.sql`、`migrations/006_activity_coordinates.sql`の順で適用します。
+1. MySQLにデータベースを作り、`schema.sql`を適用します。認証テーブル導入済みのDBには`migrations/001_activity_core.sql`、`migrations/002_projects_core.sql`、`migrations/003_admin_users.sql`、`migrations/004_optional_user_email.sql`、`migrations/005_activity_soft_delete.sql`、`migrations/006_activity_coordinates.sql`、`migrations/007_activity_bbox_index.sql`の順で適用します。
 2. `config/config.example.php`を、Web公開ディレクトリ外の場所へコピーします。
 3. DB接続、許可Origin、確認URL、再設定画面URL、送信者情報を設定します。
 4. `CMM_AUTH_CONFIG`環境変数に実設定ファイルの絶対パスを指定します。
@@ -153,6 +153,8 @@ GET api/activities.php?app=playgrounds&format=csv
 - CSV import/exportも両列に対応します。両方の空セルは `null` として解除、両列がない既存CSVは従来どおり処理します。座標列はSchema候補に含めません。
 
 既存DBではコード更新前に `migrations/006_activity_coordinates.sql` を一度適用してください。既存行は両方 `NULL` のままで、バックフィルは行いません。新規DBは `schema.sql` を使用します。
+
+BBOX検索を使う既存DBには、座標列の追加後に `migrations/007_activity_bbox_index.sql` を一度適用してください。`app_key`、削除状態、経度、緯度の順の索引です。
 
 ### Activity追加・更新・削除
 
@@ -379,7 +381,7 @@ curl --get 'http://192.168.1.6:18080/api/activity-search.php' \
   --data-urlencode 'research_mode=missing'
 ```
 
-ブラウザから別オリジンで呼ぶ場合はサーバーのCORS許可設定が必要です。現実装はProjectのActivity全件を読み込んで集約するため、ページ分割や候補指定によってDB読み込み量が減るわけではありません。
+ブラウザから別オリジンで呼ぶ場合はサーバーのCORS許可設定が必要です。`bbox`や`osmids`の指定時は、保存済みActivityをSQLで絞ってからPHPで集約します。指定なしではProject内のActivity全件を読み込みます。ページ分割は集約後に行うため、`page`や`per_page`だけではDB読み込み量は減りません。
 
 ## 管理コンソール
 

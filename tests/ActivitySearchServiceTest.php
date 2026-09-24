@@ -19,6 +19,16 @@ final class SearchMemoryRepository implements ActivityRepositoryInterface
             $row['app_key'] === $appKey && ($osmid === null || $row['osmid'] === $osmid)
         ));
     }
+    public function searchRows(string $appKey, ?array $bbox = null, ?array $osmids = null): array
+    {
+        return array_values(array_filter($this->list($appKey), static function (array $row) use ($bbox, $osmids): bool {
+            if ($osmids !== null && !in_array($row['osmid'], $osmids, true)) return false;
+            if ($bbox === null) return true;
+            if (($row['latitude'] ?? null) === null || ($row['longitude'] ?? null) === null) return false;
+            return $row['longitude'] >= $bbox[0] && $row['longitude'] <= $bbox[2]
+                && $row['latitude'] >= $bbox[1] && $row['latitude'] <= $bbox[3];
+        }));
+    }
     public function find(string $appKey, string $activityKey): ?array { return null; }
     public function findForImport(string $appKey, string $activityKey): ?array { return null; }
     public function restoreForImport(string $appKey, string $activityKey, ?string $formKey, string $osmid, array $data, ?int $updatedByUserId = null, ?array $coordinates = null): ?array { return null; }

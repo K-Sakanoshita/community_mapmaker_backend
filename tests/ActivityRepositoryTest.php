@@ -110,4 +110,18 @@ $throws(fn() => $service->batch('test', [], [$coordinateInput + ['latitude' => 1
 $check($service->find('test', 'test/coords')['longitude'] === 180.0, 'Failed batch rolls back coordinate updates');
 $cleared = $service->update('test/coords', $coordinateInput + ['latitude' => null, 'longitude' => null]);
 $check($cleared['latitude'] === null && $cleared['longitude'] === null, 'SQL clears explicit null pair');
+$repo->create('test', 'test/in', null, 'way/10', ['body' => 'inside'], null, ['latitude' => 35.0, 'longitude' => 135.0]);
+$repo->create('test', 'test/edge', null, 'way/10', ['body' => 'edge'], null, ['latitude' => 35.5, 'longitude' => 135.5]);
+$repo->create('test', 'test/out', null, 'way/20', ['body' => 'outside'], null, ['latitude' => 36.0, 'longitude' => 136.0]);
+$repo->create('other', 'other/in', null, 'way/10', [], null, ['latitude' => 35.0, 'longitude' => 135.0]);
+$repo->create('test', 'test/deleted', null, 'way/10', [], null, ['latitude' => 35.0, 'longitude' => 135.0]);
+$repo->delete('test', 'test/deleted');
+$bbox = [135.0, 35.0, 135.5, 35.5];
+$found = $repo->searchRows('test', $bbox);
+$check(array_column($found, 'activity_key') === ['test/edge', 'test/in'], 'SQL BBOX must include edges and exclude other apps, deleted rows and null coordinates');
+$check(array_column($repo->searchRows('test', $bbox, ['way/10']), 'activity_key') === ['test/edge', 'test/in'], 'SQL BBOX and OSM ID filtering');
+$check($repo->searchRows('test', $bbox, ['way/20']) === [] && $repo->searchRows('test', $bbox, []) === [], 'SQL candidate exclusions');
+$check(array_column($repo->searchRows('test', null, ['way/20']), 'activity_key') === ['test/out'], 'SQL candidate filtering without BBOX');
+$boundedSearch = $search->search('test', ['bbox' => '135,35,135.5,35.5']);
+$check($boundedSearch['pagination']['total'] === 1 && $boundedSearch['items'][0]['activity_count'] === 2, 'SQL BBOX must preserve aggregation');
 echo "ActivityRepository tests passed.\n";

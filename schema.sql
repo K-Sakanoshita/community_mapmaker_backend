@@ -60,6 +60,7 @@ CREATE TABLE activities (
     updated_at DATETIME NOT NULL,
     UNIQUE KEY uq_activities_app_activity (app_key, activity_key),
     KEY idx_activities_app_osmid (app_key, osmid),
+    KEY idx_activities_app_active_lon_lat (app_key, is_deleted, longitude, latitude),
     KEY idx_activities_app_updated (app_key, updated_at),
     KEY idx_activities_created_by (created_by_user_id, created_at),
     KEY idx_activities_updated_by (updated_by_user_id, updated_at),

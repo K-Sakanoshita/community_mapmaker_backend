@@ -21,10 +21,7 @@ final class ActivitySearchService
         $this->schema->appConfig($appKey);
         $criteria = $this->criteria($input);
         $config = $this->config($appKey);
-        $rows = $this->repository->list($appKey);
-        if ($criteria['bbox'] !== null) {
-            $rows = array_values(array_filter($rows, fn(array $row): bool => $this->inBbox($row, $criteria['bbox'])));
-        }
+        $rows = $this->repository->searchRows($appKey, $criteria['bbox'], $criteria['osmids']);
         $records = $this->summaries($rows, $config);
 
         if ($criteria['osmids'] !== null) {
@@ -137,15 +134,6 @@ final class ActivitySearchService
             throw new ActivityValidationException(['bbox' => 'Bounds must be within longitude/latitude ranges and ordered west < east, south < north.']);
         }
         return $bounds;
-    }
-
-    private function inBbox(array $row, array $bbox): bool
-    {
-        $latitude = $row['latitude'] ?? null;
-        $longitude = $row['longitude'] ?? null;
-        if ($latitude === null || $longitude === null || !is_numeric($latitude) || !is_numeric($longitude)) return false;
-        return (float)$longitude >= $bbox[0] && (float)$longitude <= $bbox[2]
-            && (float)$latitude >= $bbox[1] && (float)$latitude <= $bbox[3];
     }
 
     private function summaries(array $rows, array $config): array
