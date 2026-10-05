@@ -20,7 +20,8 @@ final class AdminUserRepository implements AdminUserRepositoryInterface, Project
 
         $sql = 'SELECT u.id, u.userid, u.email, u.status, u.role, u.email_verified_at, u.last_login_at, u.created_at, u.updated_at, '
             . '(SELECT COUNT(*) FROM activities a WHERE a.is_deleted = 0 AND a.created_by_user_id = u.id) AS activity_count, '
-            . '(SELECT COUNT(*) FROM user_projects up WHERE up.user_id = u.id) AS project_count '
+            . '(SELECT COUNT(*) FROM projects owned WHERE owned.created_by_user_id = u.id AND owned.is_deleted = 0) AS owned_project_count, '
+            . '(SELECT COUNT(*) FROM user_projects up JOIN projects p ON p.id = up.project_id WHERE up.user_id = u.id AND p.is_deleted = 0) AS project_count '
             . 'FROM users u ' . $where . ' ORDER BY u.updated_at DESC, u.id DESC LIMIT :limit OFFSET :offset';
         $statement = $this->pdo->prepare($sql);
         foreach ($params as $key => $value) $statement->bindValue($key, $value);
@@ -43,7 +44,8 @@ final class AdminUserRepository implements AdminUserRepositoryInterface, Project
         $statement = $this->pdo->prepare(
             'SELECT u.id, u.userid, u.email, u.status, u.role, u.email_verified_at, u.last_login_at, u.created_at, u.updated_at, '
             . '(SELECT COUNT(*) FROM activities a WHERE a.is_deleted = 0 AND a.created_by_user_id = u.id) AS activity_count, '
-            . '(SELECT COUNT(*) FROM user_projects up WHERE up.user_id = u.id) AS project_count '
+            . '(SELECT COUNT(*) FROM projects owned WHERE owned.created_by_user_id = u.id AND owned.is_deleted = 0) AS owned_project_count, '
+            . '(SELECT COUNT(*) FROM user_projects up JOIN projects p ON p.id = up.project_id WHERE up.user_id = u.id AND p.is_deleted = 0) AS project_count '
             . 'FROM users u WHERE u.id = :id LIMIT 1'
         );
         $statement->execute([':id' => $id]);
@@ -53,7 +55,7 @@ final class AdminUserRepository implements AdminUserRepositoryInterface, Project
         $projects = $this->pdo->prepare(
             'SELECT p.id AS project_id, p.app_key, p.project_name, up.role '
             . 'FROM user_projects up JOIN projects p ON p.id = up.project_id '
-            . 'WHERE up.user_id = :id ORDER BY p.project_name, p.id'
+            . 'WHERE up.user_id = :id AND p.is_deleted = 0 ORDER BY p.project_name, p.id'
         );
         $projects->execute([':id' => $id]);
 
@@ -108,7 +110,7 @@ final class AdminUserRepository implements AdminUserRepositoryInterface, Project
     {
         if ($projectIds === []) return true;
         $placeholders = implode(',', array_fill(0, count($projectIds), '?'));
-        $statement = $this->pdo->prepare('SELECT COUNT(*) FROM projects WHERE id IN (' . $placeholders . ')');
+        $statement = $this->pdo->prepare('SELECT COUNT(*) FROM projects WHERE is_deleted = 0 AND id IN (' . $placeholders . ')');
         $statement->execute(array_values($projectIds));
         return (int)$statement->fetchColumn() === count(array_unique($projectIds));
     }
@@ -132,11 +134,25 @@ final class AdminUserRepository implements AdminUserRepositoryInterface, Project
         }
     }
 
+    public function assignProject(int $userId, int $projectId, string $role): void
+    {
+        $statement = $this->pdo->prepare(
+            'INSERT INTO user_projects (user_id, project_id, role, created_at) '
+            . 'VALUES (:user_id, :project_id, :role, :created_at)'
+        );
+        $statement->execute([
+            ':user_id' => $userId,
+            ':project_id' => $projectId,
+            ':role' => $role,
+            ':created_at' => gmdate('Y-m-d H:i:s'),
+        ]);
+    }
+
     public function rolesForUser(int $userId): array
     {
         $statement = $this->pdo->prepare(
             'SELECT p.app_key, up.role FROM user_projects up '
-            . 'JOIN projects p ON p.id = up.project_id WHERE up.user_id = :user_id'
+            . 'JOIN projects p ON p.id = up.project_id WHERE up.user_id = :user_id AND p.is_deleted = 0'
         );
         $statement->execute([':user_id' => $userId]);
         $roles = [];
@@ -150,7 +166,7 @@ final class AdminUserRepository implements AdminUserRepositoryInterface, Project
     {
         $statement = $this->pdo->prepare(
             'SELECT up.role FROM user_projects up JOIN projects p ON p.id = up.project_id '
-            . 'WHERE up.user_id = :user_id AND p.app_key = :app_key LIMIT 1'
+            . 'WHERE up.user_id = :user_id AND p.app_key = :app_key AND p.is_deleted = 0 LIMIT 1'
         );
         $statement->execute([':user_id' => $userId, ':app_key' => $appKey]);
         $role = $statement->fetchColumn();
@@ -196,6 +212,7 @@ final class AdminUserRepository implements AdminUserRepositoryInterface, Project
             'created_at' => (string)$row['created_at'],
             'updated_at' => (string)$row['updated_at'],
             'activity_count' => (int)$row['activity_count'],
+            'owned_project_count' => (int)$row['owned_project_count'],
             'project_count' => (int)$row['project_count'],
         ];
     }

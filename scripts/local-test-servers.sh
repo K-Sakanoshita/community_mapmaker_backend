@@ -11,6 +11,7 @@ compose_project=${CMM_TEST_PROJECT_NAME:-community-mapmaker-backend-test}
 web_port=${CMM_TEST_WEB_PORT:-18080}
 https_port=${CMM_TEST_HTTPS_PORT:-18443}
 db_port=${CMM_TEST_DB_PORT:-13306}
+mail_port=${CMM_TEST_MAIL_PORT:-18025}
 compose_access_file=${CMM_TEST_ACCESS_COMPOSE_FILE:-${TMPDIR:-/tmp}/${compose_project}-network-access.yml}
 ca_file="$project_root/docker/local/cmm-local-ca.crt"
 
@@ -237,6 +238,8 @@ print_access() {
     cat <<EOF
 Web:      http://127.0.0.1:$web_port/admin/
 API:      http://127.0.0.1:$web_port/api/activity-schema.php
+Register: http://127.0.0.1:$web_port/register.html
+Mailpit:  http://127.0.0.1:$mail_port/
 LAN HTTP: http://$lan_host:$web_port/admin/
 EOF
     if [[ -n "$host_name" && -n "$host_ipv4" && "$host_ipv4" != 127.* ]]; then
@@ -380,6 +383,55 @@ migrate_stack() {
         echo 'Activity BBOX index migration is only partially applied; inspect the database before continuing.' >&2
         exit 1
     fi
+    local frontend_column_count
+    frontend_column_count=$(compose exec --no-TTY database \
+        mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker --batch --skip-column-names \
+        --execute="SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_schema = DATABASE() AND table_name = 'projects'
+            AND column_name IN ('frontend_url', 'frontend_public')")
+    if [[ "$frontend_column_count" == '0' ]]; then
+        compose exec --no-TTY database \
+            mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker < "$project_root/migrations/008_project_frontend.sql"
+        echo 'Applied migration 008_project_frontend.sql.'
+    elif [[ "$frontend_column_count" == '2' ]]; then
+        echo 'Project frontend migration is already applied.'
+    else
+        echo 'Project frontend migration is only partially applied; inspect the database before continuing.' >&2
+        exit 1
+    fi
+    local project_delete_column_count
+    project_delete_column_count=$(compose exec --no-TTY database \
+        mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker --batch --skip-column-names \
+        --execute="SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_schema = DATABASE() AND table_name = 'projects'
+            AND column_name IN ('is_deleted', 'deleted_at')")
+    if [[ "$project_delete_column_count" == '0' ]]; then
+        compose exec --no-TTY database \
+            mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker < "$project_root/migrations/009_project_soft_delete.sql"
+        echo 'Applied migration 009_project_soft_delete.sql.'
+    elif [[ "$project_delete_column_count" == '2' ]]; then
+        echo 'Project soft delete migration is already applied.'
+    else
+        echo 'Project soft delete migration is only partially applied; inspect the database before continuing.' >&2
+        exit 1
+    fi
+    local project_creator_parts
+    project_creator_parts=$(compose exec --no-TTY database \
+        mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker --batch --skip-column-names \
+        --execute="SELECT
+            (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'projects' AND column_name = 'created_by_user_id') +
+            (SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'projects' AND index_name = 'idx_projects_created_by' AND column_name = 'created_by_user_id') +
+            (SELECT COUNT(*) FROM information_schema.table_constraints WHERE constraint_schema = DATABASE() AND table_name = 'projects' AND constraint_name = 'fk_projects_created_by' AND constraint_type = 'FOREIGN KEY')")
+    if [[ "$project_creator_parts" == '0' ]]; then
+        compose exec --no-TTY database \
+            mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker < "$project_root/migrations/010_project_creator.sql"
+        echo 'Applied migration 010_project_creator.sql.'
+    elif [[ "$project_creator_parts" == '3' ]]; then
+        echo 'Project creator migration is already applied.'
+    else
+        echo 'Project creator migration is only partially applied; inspect the database before continuing.' >&2
+        exit 1
+    fi
 
 }
 
@@ -401,6 +453,10 @@ test_stack() {
     compose exec --no-TTY --env MARIADB_PWD=cmm_local_test database \
         mariadb-admin ping --user=cmm --silent >/dev/null
     curl --fail --silent --show-error "$base/admin/" >/dev/null
+    curl --fail --silent --show-error "$base/register.html" >/dev/null
+    curl --fail --silent --show-error "$base/api/public-projects.php" >/dev/null
+    curl --fail --silent --show-error "$base/verify-email.html" >/dev/null
+    curl --fail --silent --show-error "http://127.0.0.1:$mail_port/api/v1/messages" >/dev/null
     fetch_schema --fail --silent --show-error "$base/api/activity-schema.php"
     curl --fail --silent --show-error "$base/api/activities.php?app=playgrounds&bbox=135,34,136,35" >/dev/null
     if [[ -n "$host_name" && -n "$host_ipv4" && "$host_ipv4" != 127.* ]]; then
@@ -428,7 +484,7 @@ test_stack() {
     [[ "$editor_status" == '200' ]] || { echo "Editor batch access returned HTTP $editor_status" >&2; return 1; }
     [[ "$viewer_status" == '403' ]] || { echo "Viewer batch access returned HTTP $viewer_status" >&2; return 1; }
     [[ "$unassigned_status" == '403' ]] || { echo "Unassigned batch access returned HTTP $unassigned_status" >&2; return 1; }
-    echo 'MariaDB, local/LAN/VPN HTTP, LAN HTTPS, CORS, public API, admin APIs, and Project role access: ok'
+    echo 'MariaDB, Mailpit, registration pages, local/LAN/VPN HTTP, LAN HTTPS, CORS, public API, admin APIs, and Project role access: ok'
 }
 
 command_name=${1:-help}

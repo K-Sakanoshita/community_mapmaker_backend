@@ -21,11 +21,10 @@ ActivityApi::run(function () use ($container): array {
     if ($method === 'POST') {
         \CommunityMapMaker\Auth\ConsoleSession::establish($container['user_repo']->findById((int)$user['id']));
     }
-    $isAdmin = ($user['role'] ?? 'user') === 'admin';
-    $projects = $container['project_access']->visibleProjects(
+    $projects = $container['project_repo']->withActivityCounts($container['project_access']->visibleProjects(
         $user,
-        $container['project_service']->list(!$isAdmin)
-    );
+        $container['project_service']->list()
+    ));
     return [200, [
         'user' => [
             'id' => (int)$user['id'],

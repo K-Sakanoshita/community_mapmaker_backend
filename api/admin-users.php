@@ -29,6 +29,9 @@ AdminApi::run(function () use ($container, $method): array {
         return [201, $container['admin_users']->create($input, (int)$admin['id'], $client)];
     }
     $id = AdminApi::userId($input);
+    if ($action === 'add_email') {
+        return [200, $container['admin_users']->addEmail($id, $input, (int)$admin['id'], $client)];
+    }
     if ($action === 'resend_verification') {
         return [200, ['status' => 'ok'] + $container['admin_users']->resendVerification($id, (int)$admin['id'], $client)];
     }

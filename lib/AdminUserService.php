@@ -106,6 +106,16 @@ final class AdminUserService
         return $result;
     }
 
+    public function addEmail(int $id, array $input, int $adminUserId, string $clientIdentifier): array
+    {
+        $this->find($id);
+        $result = $this->auth->addEmailForUser($id, $input, $clientIdentifier);
+        $this->audit->record($adminUserId, 'user.email_add', 'user', $id, [
+            'verification_email_sent' => (bool)$result['verification_email_sent'],
+        ]);
+        return $this->find($id) + $result;
+    }
+
     public function sendPasswordReset(int $id, int $adminUserId, string $clientIdentifier): array
     {
         $this->find($id);

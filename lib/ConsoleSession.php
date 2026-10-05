@@ -31,7 +31,14 @@ final class ConsoleSession
     {
         // This non-simple header prevents cross-site form requests using cookies.
         // It is deliberately not included in the cross-origin allow-headers list.
-        if (($_SERVER['HTTP_X_CONSOLE_SESSION'] ?? '') !== '1' || !isset($_COOKIE['cmm_console'])) return null;
+        if (($_SERVER['HTTP_X_CONSOLE_SESSION'] ?? '') !== '1') return null;
+        return self::pageUser($container);
+    }
+
+    /** For a same-site HTML GET; never use this for state-changing requests. */
+    public static function pageUser(array $container): ?array
+    {
+        if (!isset($_COOKIE['cmm_console'])) return null;
         self::start();
         $id = (int)($_SESSION['user_id'] ?? 0);
         $stamp = (string)($_SESSION['password_stamp'] ?? '');

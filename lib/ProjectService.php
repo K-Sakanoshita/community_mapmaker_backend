@@ -26,10 +26,11 @@ final class ProjectService
         foreach ($dbProjects as $p) {
             $dbMap[$p['app_key']] = $p;
         }
+        $deletedKeys = array_fill_keys($this->projects->deletedKeys(), true);
 
         // Include projects defined in static configuration if not in DB
         foreach ($this->activitySchema->appKeys() as $appKey) {
-            if (!isset($dbMap[$appKey])) {
+            if (!isset($dbMap[$appKey]) && !isset($deletedKeys[$appKey])) {
                 try {
                     $schema = $this->activitySchema->get($appKey);
                     $config = $this->activitySchema->appConfig($appKey);
@@ -37,8 +38,11 @@ final class ProjectService
                         'id' => null,
                         'app_key' => $appKey,
                         'project_name' => (string)($config['project_name'] ?? $appKey),
+                        'frontend_url' => $config['frontend_url'] ?? null,
+                        'frontend_public' => (bool)($config['frontend_public'] ?? false),
                         'schema' => $schema,
                         'enabled' => true,
+                        'created_by_user_id' => null,
                         'created_at' => null,
                         'updated_at' => null,
                     ];
@@ -55,9 +59,10 @@ final class ProjectService
     {
         $this->activitySchema->assertKey($appKey, 'app');
         $project = $this->projects->find($appKey);
-        if ($project !== null) {
+        if ($project !== null && !$project['is_deleted']) {
             return $project;
         }
+        if ($project !== null) throw new ProjectNotFoundException('Project not found.');
 
         // fallback to static config
         try {
@@ -67,8 +72,11 @@ final class ProjectService
                 'id' => null,
                 'app_key' => $appKey,
                 'project_name' => (string)($config['project_name'] ?? $appKey),
+                'frontend_url' => $config['frontend_url'] ?? null,
+                'frontend_public' => (bool)($config['frontend_public'] ?? false),
                 'schema' => $schema,
                 'enabled' => true,
+                'created_by_user_id' => null,
                 'created_at' => null,
                 'updated_at' => null,
             ];
@@ -77,7 +85,7 @@ final class ProjectService
         }
     }
 
-    public function create(array $input): array
+    public function create(array $input, ?int $createdByUserId = null): array
     {
         $projectName = trim((string)($input['project_name'] ?? ''));
         if ($projectName === '') {
@@ -106,8 +114,11 @@ final class ProjectService
         }
         $schema = $this->sanitizeSchema($schema);
 
-        $enabled = isset($input['enabled']) ? (bool)$input['enabled'] : true;
-        return $this->projects->create($appKey, $projectName, $schema, $enabled);
+        $enabled = true;
+        $frontendUrl = $this->sanitizeFrontendUrl($input['frontend_url'] ?? null);
+        $frontendPublic = $this->sanitizeFrontendPublic($input['frontend_public'] ?? false);
+        if ($frontendPublic && $frontendUrl === null) throw new ActivityValidationException(['frontend_url' => 'A public frontend requires a URL.']);
+        return $this->projects->create($appKey, $projectName, $schema, $enabled, $frontendUrl, $frontendPublic, $createdByUserId);
     }
 
     public function update(string $appKey, array $input): array
@@ -129,21 +140,34 @@ final class ProjectService
             $schema = $this->sanitizeSchema($input['schema']);
         }
 
-        $enabled = isset($input['enabled']) ? (bool)$input['enabled'] : null;
+        $enabled = null;
+        $frontendUrl = array_key_exists('frontend_url', $input) ? ($this->sanitizeFrontendUrl($input['frontend_url']) ?? '') : null;
+        $frontendPublic = array_key_exists('frontend_public', $input) ? $this->sanitizeFrontendPublic($input['frontend_public']) : null;
 
         $existing = $this->projects->find($appKey);
+        if ($existing !== null && $existing['is_deleted']) throw new ProjectNotFoundException('Project not found.');
         if ($existing === null) {
             // If it exists in static config, initialize it in DB
             $current = $this->find($appKey);
+            $effectiveUrl = $frontendUrl === null ? $current['frontend_url'] : ($frontendUrl === '' ? null : $frontendUrl);
+            if (($frontendPublic ?? $current['frontend_public']) && $effectiveUrl === null) {
+                throw new ActivityValidationException(['frontend_url' => 'A public frontend requires a URL.']);
+            }
             return $this->projects->create(
                 $appKey,
                 $projectName ?? $current['project_name'],
                 $schema ?? $current['schema'],
-                $enabled ?? $current['enabled']
+                $enabled ?? $current['enabled'],
+                $frontendUrl === null ? $current['frontend_url'] : ($frontendUrl === '' ? null : $frontendUrl),
+                $frontendPublic ?? $current['frontend_public']
             );
         }
 
-        $updated = $this->projects->update($appKey, $projectName, $schema, $enabled);
+        $effectiveUrl = $frontendUrl === null ? $existing['frontend_url'] : ($frontendUrl === '' ? null : $frontendUrl);
+        if (($frontendPublic ?? $existing['frontend_public']) && $effectiveUrl === null) {
+            throw new ActivityValidationException(['frontend_url' => 'A public frontend requires a URL.']);
+        }
+        $updated = $this->projects->update($appKey, $projectName, $schema, $enabled, $frontendUrl, $frontendPublic);
         if ($updated === null) {
             throw new ProjectNotFoundException('Project not found.');
         }
@@ -156,6 +180,30 @@ final class ProjectService
         if (!$this->projects->delete($appKey)) {
             throw new ProjectNotFoundException('Project not found.');
         }
+    }
+
+    private function sanitizeFrontendUrl(mixed $value): ?string
+    {
+        if ($value === null || $value === '') return null;
+        if (!is_string($value)) throw new ActivityValidationException(['frontend_url' => 'Frontend URL must be a string.']);
+        $url = trim($value);
+        if ($url === '') return null;
+        if (strlen($url) > 2048 || preg_match('/[\x00-\x20\x7f]/', $url)) {
+            throw new ActivityValidationException(['frontend_url' => 'Frontend URL is too long or contains invalid characters.']);
+        }
+        $parts = parse_url($url);
+        if (!is_array($parts) || !in_array(strtolower((string)($parts['scheme'] ?? '')), ['http', 'https'], true)
+            || empty($parts['host']) || isset($parts['user']) || isset($parts['pass'])
+            || filter_var($url, FILTER_VALIDATE_URL) === false) {
+            throw new ActivityValidationException(['frontend_url' => 'Frontend URL must be an absolute HTTP or HTTPS URL without credentials.']);
+        }
+        return $url;
+    }
+
+    private function sanitizeFrontendPublic(mixed $value): bool
+    {
+        if (!is_bool($value)) throw new ActivityValidationException(['frontend_public' => 'Public visibility must be true or false.']);
+        return $value;
     }
 
     public function sanitizeSchema(array $schema): array

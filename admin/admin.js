@@ -1,6 +1,15 @@
 "use strict";
 
-window.addEventListener('DOMContentLoaded', () => connect(true));
+window.addEventListener('DOMContentLoaded', async () => {
+  try { await loadAdminMessages(); await connect(true); }
+  catch (error) {
+    document.getElementById('sessionLoading').hidden = true;
+    document.getElementById('loginScreen').hidden = false;
+    document.getElementById('loginStatus').textContent = document.documentElement.lang === "en"
+      ? `Could not load translations: ${error.message}`
+      : `翻訳データを読み込めませんでした: ${error.message}`;
+  }
+});
 
 const apiRoot = "../api";
 const fieldTypes = ["text", "textarea", "number", "date", "select", "checkbox", "url", "wikimedia"];
@@ -11,44 +20,47 @@ const state = {
   sessionUser: null,
   schema: { fields: {} }, rows: [], columnsTable: null, activityTable: null, nextColumnKey: 1, nextRowKey: 1,
   newActivityRows: new Set(), deletedActivityRows: new Set(), dirtyActivityFields: new Map(),
-  schemaDirty: false, pendingCsv: null, users: [], userPage: 1, userPagination: null, currentUser: null
+  schemaDirty: false, pendingCsv: null, users: [], userPage: 1, userPagination: null, currentUser: null, passwordUser: null
 };
 const ids = [
-  "loginScreen", "loginForm", "loginStatus", "userid", "password", "connectButton", "adminHeader", "adminMain", "currentAdmin", "logoutButton",
-  "status", "statusModal", "projectsGrid", "newProjectButton",
-  "columnsProjectKey", "projectName", "projectEnabled", "columnsTable", "addColumnButton", "saveColumnsButton",
-  "activitiesProjectKey", "appSelect", "search", "loadButton", "addButton", "discardButton", "saveAllButton", "dirtyCount",
+  "sessionLoading", "loginScreen", "loginForm", "loginStatus", "userid", "password", "connectButton", "adminHeader", "adminMain", "currentAdmin", "logoutButton", "mobileViewSelect",
+  "status", "statusModal", "projectsGrid", "newProjectButton", "trashStatus", "trashProjectsBody",
+  "columnsBackButton", "columnsProjectKey", "projectName", "projectFrontendUrl", "projectFrontendPublic", "columnsTable", "addColumnButton", "saveColumnsButton",
+  "activitiesBackButton", "activitiesFrontendLink", "appSelect", "search", "addButton", "discardButton", "saveAllButton", "dirtyCount",
   "jsonExport", "csvExport", "importFile", "activityTable", "projectDialog", "projectForm",
-  "newProjectName", "newAppKey", "csvDialog", "csvForm", "csvSummary", "csvMissing", "addMissingLabel", "addMissingColumns",
+  "newProjectName", "newAppKey", "newProjectFrontendUrl", "newProjectFrontendPublic", "csvDialog", "csvForm", "csvSummary", "csvMissing", "addMissingLabel", "addMissingColumns",
   "newUserButton", "usersSearch", "userStatusFilter", "userVerifiedFilter", "userRoleFilter", "userProjectFilter", "usersLoadButton",
   "usersBody", "usersPrevButton", "usersNextButton", "usersPageInfo", "newUserDialog", "newUserForm", "newUserId", "newUserEmail",
   "newUserModeHint", "newUserPasswordFields", "newUserPassword", "newUserPasswordConfirmation", "newUserSubmitButton", "newUserRole", "newUserProjects",
   "userDialog", "userForm", "userDialogTitle", "userMetadata", "editUserStatus", "editUserRole",
-  "editUserProjects", "resendVerificationButton", "sendPasswordResetButton", "editUserPassword", "editUserPasswordConfirmation",
-  "setUserPasswordButton", "userPasswordStatus", "userRecentActivities"
+  "editUserProjects", "userAddEmailSection", "addUserEmail", "addUserEmailButton", "userEmailStatus", "userMailActions", "userMailAddress", "userMailDescription", "resendVerificationButton",
+  "passwordResetDialog", "passwordResetTitle", "passwordResetEmailSection", "passwordResetEmailAddress", "sendPasswordResetButton", "editUserPassword", "editUserPasswordConfirmation", "setUserPasswordButton", "userPasswordStatus"
 ];
 const els = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
 
 let statusReturnDialog = null;
 
+function isProgressMessage(message) { return message.endsWith("…") || message.endsWith("..."); }
+
 function setStatus(message, error = false, showModal = true) {
   els.status.textContent = message;
   els.status.classList.toggle("text-danger", error);
-  els.status.classList.toggle("text-success", !error && !/中|してください/.test(message));
-  if (!showModal || !message || /中…$/.test(message)) return;
-  document.getElementById("statusModalTitle").textContent = error ? "エラー" : "お知らせ";
+  els.status.classList.toggle("text-success", !error && !isProgressMessage(message));
+  if (!showModal || !message || isProgressMessage(message)) return;
+  document.getElementById("statusModalTitle").textContent = error ? t("message.ec6399d678a4") : t("message.28eeac5d2b7c");
+  if (els.statusModal.open) return;
   const openDialog = document.querySelector("dialog[open]");
   if (openDialog) {
     statusReturnDialog = openDialog;
     openDialog.close();
   }
-  bootstrap.Modal.getOrCreateInstance(els.statusModal).show();
+  els.statusModal.showModal();
 }
 
 function setLoginStatus(message, error = false) {
   els.loginStatus.textContent = message;
   els.loginStatus.classList.toggle("error", error);
-  els.loginStatus.classList.toggle("success", !error && !/中|してください/.test(message));
+  els.loginStatus.classList.toggle("success", !error && !isProgressMessage(message));
 }
 
 function showAdminConsole() {
@@ -61,26 +73,95 @@ function showAdminConsole() {
 async function logout() {
   if (!confirmDiscard()) return;
   try { await request('console-session.php', { method: 'DELETE' }); }
-  catch (error) { setStatus(`ログアウトできません: ${error.message}`, true); return; }
+  catch (error) { setStatus(`${t("message.7a3196c1a7d1")}${error.message}`, true); return; }
   state.columnsTable?.destroy(); state.columnsTable = null;
   state.activityTable?.destroy(); state.activityTable = null;
-  state.projects = []; state.rows = []; state.users = []; state.currentUser = null; state.sessionUser = null;
+  state.projects = []; state.rows = []; state.users = []; state.currentUser = null; state.passwordUser = null; state.sessionUser = null;
   state.schema = { fields: {} }; state.schemaDirty = false;
   state.newActivityRows.clear(); state.deletedActivityRows.clear(); state.dirtyActivityFields.clear();
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
   document.body.classList.remove("activity-spreadsheet-view");
   els.adminHeader.hidden = true; els.adminMain.hidden = true; els.loginScreen.hidden = false;
   statusReturnDialog = null;
-  bootstrap.Modal.getInstance(els.statusModal)?.hide();
+  if (els.statusModal.open) els.statusModal.close();
   els.currentAdmin.textContent = ""; els.password.value = ""; els.status.textContent = "";
-  document.querySelectorAll('[data-view="columns"], [data-view="activities"], [data-view="users"]').forEach(button => { button.disabled = true; });
+  document.querySelectorAll('[data-view="activities"], [data-view="users"], [data-view="trash"]').forEach(button => { button.disabled = true; });
+  els.mobileViewSelect.value = "projects";
+  els.mobileViewSelect.querySelector('[value="activities"]').disabled = true;
+  els.mobileViewSelect.querySelector('[value="users"]').disabled = true;
+  els.mobileViewSelect.querySelector('[value="trash"]').disabled = true;
   els.newProjectButton.disabled = true; els.newUserButton.disabled = true;
-  setLoginStatus("ログアウトしました。再度ログインしてください。");
+  setLoginStatus(t("message.ac454ea66043"));
   (els.userid.value ? els.password : els.userid).focus();
 }
 
 function credentials() {
   return `Basic ${btoa(unescape(encodeURIComponent(`${els.userid.value}:${els.password.value}`)))}`;
+}
+
+function formatApiError(payload, status) {
+  const codeMessages = {
+    authentication_required: t("message.1353b49714de"),
+    admin_required: t("message.be2752e93d9d"),
+    project_access_denied: t("message.ac32ba597a9b"),
+    project_not_found: t("message.cd1fcbd4b624"),
+    app_not_found: t("message.cd1fcbd4b624"),
+    activity_not_found: t("message.7f61e849f97e"),
+    project_already_exists: t("message.38c9fa440047"),
+    activity_already_exists: t("message.e384296911a8"),
+    identity_already_registered: t("message.e27adb1122a5"),
+    user_not_found: t("message.41cafa64bec1"),
+    last_active_admin: t("message.e089b19d2feb"),
+    rate_limit_exceeded: t("message.01b95783a916"),
+    payload_too_large: t("message.f9adeb9e3b6d"),
+    invalid_json: t("message.7b10c7c4bbde"),
+    invalid_response: t("message.1794b352a30c"),
+    server_error: t("message.d8f79fb75360")
+  };
+  if (payload?.code === "validation_failed" && payload.errors && typeof payload.errors === "object") {
+    const validationMessages = {
+      "Option values must be unique.": t("message.5953fca030e4"),
+      "Option value must be a scalar.": t("message.f13b5564a821"),
+      "Option must be a scalar or value/label object.": t("message.90287decb311"),
+      "Option value must be 1-255 characters.": t("message.5f20043f6071"),
+      "Options must not be empty.": t("message.278c9017d958"),
+      "Select fields require at least one option.": t("message.278c9017d958"),
+      "Options must be an array.": t("message.90287decb311"),
+      "Options are only supported for select and checkbox fields.": t("message.180b9757ee33"),
+      "Unsupported field type.": t("message.0f40270382da"),
+      "System columns cannot be added to schema fields.": t("message.ce483023ffc1"),
+      "Field definition must be an object.": t("message.aeefaf9f242e"),
+      "Label must not exceed 255 characters.": t("message.883e4236f746"),
+      "Column width must be between 80 and 800 pixels.": t("message.5844da877b43"),
+      "Maximum length must be between 1 and 1000000.": t("message.08841396c496"),
+      "Project name is required.": t("message.2ac840f2a6c1"),
+      "Project name cannot be empty.": t("message.2ac840f2a6c1"),
+      "Project name must not exceed 255 characters.": t("message.4310225e8504"),
+      "App key is required.": t("message.eecac6026514"),
+      "App key must be 1-64 lowercase alphanumeric, underscore or hyphen characters.": t("message.f2878a66df8c"),
+      "A public frontend requires a URL.": t("message.f6ca1a8f6cf6"),
+      "Frontend URL must be a string.": t("message.29686cfd16d2"),
+      "Frontend URL is too long or contains invalid characters.": t("message.572ca3c0c842"),
+      "Frontend URL must be an absolute HTTP or HTTPS URL without credentials.": t("message.8725a61a7234"),
+      "Public visibility must be true or false.": t("message.3cc316d802d4"),
+      "Schema must be an object.": t("message.aeefaf9f242e"),
+      "Schema must contain a \"fields\" object.": t("message.529c767875a9"),
+      "Schema fields must be a JSON object keyed by field name.": t("message.aeefaf9f242e"),
+      "Schema may contain at most 256 fields.": t("message.dadc424ea476")
+    };
+    const details = Object.entries(payload.errors).map(([field, message]) => {
+      const [key, part, index] = field.split(".");
+      const column = state.columnsTable?.getData()?.find(row => row.field === key);
+      const label = column?.label || key;
+      const location = part === "options"
+        ? t("errors.option_location", { label, row: /^\d+$/.test(index || "") ? Number(index) + 1 : "" })
+        : t("errors.field_location", { label });
+      return `${location}: ${validationMessages[message] || t("message.2a600dc02f7c")}`;
+    });
+    return `${t("message.25cc48d137de")}${details.join("\n")}`;
+  }
+  const message = codeMessages[payload?.code] || t("errors.http", { status });
+  return payload?.request_id ? `${message}${t("message.97270c4912e2")}${payload.request_id}` : message;
 }
 
 async function request(path, options = {}) {
@@ -91,8 +172,9 @@ async function request(path, options = {}) {
   const response = await fetch(`${apiRoot}/${path}`, { ...options, headers });
   const payload = await response.json().catch(() => ({ code: "invalid_response" }));
   if (!response.ok) {
-    const detail = payload.errors ? `: ${JSON.stringify(payload.errors)}` : "";
-    throw new Error(`${payload.code || `HTTP ${response.status}`}${detail}`);
+    const error = new Error(formatApiError(payload, response.status));
+    error.code = payload.code;
+    throw error;
   }
   return payload;
 }
@@ -102,6 +184,11 @@ function currentProject() {
 }
 
 function isAdmin() { return state.sessionUser?.role === "admin"; }
+function canManageProject(project = currentProject()) { return isAdmin() || project?.access_role === "project_admin"; }
+function canDeleteProject(project) {
+  return isAdmin() || (project?.access_role === "project_admin" && project.created_by_user_id != null
+    && Number(project.created_by_user_id) === Number(state.sessionUser?.id));
+}
 
 function canWriteActivities(project = currentProject()) {
   return isAdmin() || ["editor", "project_admin"].includes(project?.access_role);
@@ -109,13 +196,18 @@ function canWriteActivities(project = currentProject()) {
 
 function configureConsoleAccess() {
   const admin = isAdmin();
-  document.querySelectorAll('[data-view="projects"], [data-view="columns"], [data-view="users"]').forEach(button => {
-    button.hidden = !admin;
-    button.disabled = !admin || ((button.dataset.view === "columns") && !state.currentApp);
-  });
+  const usersButton = document.querySelector('[data-view="users"]');
+  usersButton.hidden = !admin; usersButton.disabled = !admin;
+  const trashButton = document.querySelector('[data-view="trash"]');
+  trashButton.hidden = !admin; trashButton.disabled = !admin;
+  const usersOption = els.mobileViewSelect.querySelector('[value="users"]');
+  usersOption.hidden = !admin; usersOption.disabled = !admin;
+  const trashOption = els.mobileViewSelect.querySelector('[value="trash"]');
+  trashOption.hidden = !admin; trashOption.disabled = !admin;
   const activitiesButton = document.querySelector('[data-view="activities"]');
-  activitiesButton.hidden = false; activitiesButton.disabled = admin && !state.currentApp;
-  els.newProjectButton.disabled = !admin; els.newUserButton.disabled = !admin;
+  activitiesButton.hidden = false; activitiesButton.disabled = !currentProject();
+  els.mobileViewSelect.querySelector('[value="activities"]').disabled = activitiesButton.disabled;
+  els.newProjectButton.disabled = false; els.newUserButton.disabled = !admin;
   els.importFile.closest("label").hidden = !admin;
 }
 
@@ -128,7 +220,7 @@ function hasUnsavedChanges() {
 }
 
 function confirmDiscard() {
-  return !hasUnsavedChanges() || confirm("未保存の変更があります。破棄して移動しますか？");
+  return !hasUnsavedChanges() || confirm(t("message.868d5437b3ae"));
 }
 
 function updateUrl() {
@@ -141,69 +233,102 @@ function updateUrl() {
 
 function showView(view, force = false) {
   if (!force && !confirmDiscard()) return;
-  if (!isAdmin() && view !== "activities") view = "activities";
-  if (view === "columns" && !currentProject()) view = "projects";
-  if (view === "activities" && !currentProject() && isAdmin()) view = "projects";
+  if (["users", "trash"].includes(view) && !isAdmin()) view = "projects";
+  if (view === "columns" && !canManageProject()) view = "projects";
+  if (view === "activities" && !currentProject()) view = "projects";
+  if (!["projects", "columns", "activities", "users", "trash"].includes(view)) view = "projects";
   state.view = view;
   document.body.classList.toggle("activity-spreadsheet-view", view === "activities");
   document.querySelectorAll(".view").forEach(section => { section.hidden = section.id !== `${view}View`; });
   document.querySelectorAll("[data-view]").forEach(button => button.classList.toggle("active", button.dataset.view === view));
+  els.mobileViewSelect.value = ["activities", "users", "trash"].includes(view) ? view : "projects";
   updateUrl();
   if (view === "columns") openColumns();
   if (view === "activities") loadActivities();
   if (view === "users") loadUsers();
+  if (view === "trash") loadDeletedProjects();
 }
 
 async function connect(restore = false) {
   if (!restore && (!els.userid.value || !els.password.value)) {
-    setLoginStatus("ユーザーIDとパスワードを入力してください。", true);
+    setLoginStatus(t("message.e09b9a5730bc"), true);
     return;
   }
   els.connectButton.disabled = true;
-  setLoginStatus("認証中…");
+  setLoginStatus(t("message.8f3f2866f749"));
   try {
     const session = await request("console-session.php", restore ? {} : { method: 'POST', basic: true });
     els.password.value = '';
     state.sessionUser = session.user; state.projects = session.projects;
     if (!currentProject()) state.currentApp = state.projects[0]?.app_key || "";
     configureConsoleAccess();
-    if (isAdmin()) renderProjects();
+    renderProjects();
     populateProjectSelect();
     showAdminConsole();
-    setStatus(`${state.projects.length}件のProjectを読み込みました。`, false, false);
-    if (!isAdmin()) state.view = "activities";
+    setStatus(`${state.projects.length}${t("message.88c406f67b0f")}`, false, false);
     showView(state.view, true);
   } catch (error) {
-    setLoginStatus(restore ? 'ユーザーIDとパスワードを入力してください。' : `ログインできません: ${error.message}`, !restore);
-    els.password.select();
-  } finally { els.connectButton.disabled = false; }
+    const message = restore
+      ? t("message.e09b9a5730bc")
+      : error.code === 'authentication_required'
+        ? t("message.5a5920b3fe2f")
+        : `${t("message.4c1ac64e5908")}${error.message}`;
+    setLoginStatus(message, !restore);
+    if (restore) {
+      els.loginScreen.hidden = false;
+      els.userid.focus();
+    } else {
+      els.password.select();
+    }
+  } finally {
+    if (restore) els.sessionLoading.hidden = true;
+    els.connectButton.disabled = false;
+  }
+}
+
+function safeFrontendUrl(value) {
+  if (!value) return null;
+  try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password ? url.href : null; }
+  catch { return null; }
+}
+
+function setFrontendLink(link, value) {
+  const url = safeFrontendUrl(value);
+  link.hidden = !url;
+  if (url) link.href = url; else link.removeAttribute("href");
 }
 
 function renderProjects() {
   if (!state.projects.length) {
     els.projectsGrid.className = "projects-grid empty-state";
-    els.projectsGrid.textContent = "Projectはまだありません。";
+    els.projectsGrid.textContent = t("message.458ce45954f7");
     return;
   }
   els.projectsGrid.className = "projects-grid";
   els.projectsGrid.replaceChildren(...state.projects.map(project => {
     const card = document.createElement("article");
     card.className = "project-card card shadow-sm p-3 d-flex flex-column justify-content-between gap-3";
-    const fieldCount = Object.keys(project.schema?.fields || {}).length;
     const header = document.createElement("div");
     header.className = "project-card-header";
     const title = document.createElement("h3"); title.textContent = project.project_name;
     const key = document.createElement("span"); key.className = "key"; key.textContent = project.app_key;
-    const meta = document.createElement("p"); meta.className = "project-card-meta";
-    meta.textContent = `${fieldCount}カラム / ${project.enabled ? "有効" : "無効"}${project.id === null ? " / 設定ファイル由来" : ""}`;
-    header.append(title, key, meta);
+    header.append(title, key);
+    if (project.id === null) {
+      const meta = document.createElement("p"); meta.className = "project-card-meta";
+      meta.textContent = t("projects.configuration_source");
+      header.append(meta);
+    }
+    const frontendUrl = safeFrontendUrl(project.frontend_url);
+    if (frontendUrl) {
+      const link = document.createElement("a"); link.href = frontendUrl; link.target = "_blank"; link.rel = "noopener noreferrer";
+      link.className = "project-frontend-link"; link.setAttribute("aria-label", `${project.project_name}${t("message.5ca4c0cd8aee")}`); link.title = t("message.872c0c3f355f");
+      link.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>';
+      header.append(link);
+    }
     const actions = document.createElement("div"); actions.className = "project-card-actions";
-    actions.append(
-      actionButton("Activities", () => selectProject(project.app_key, "activities"), "primary"),
-      actionButton("カラム定義", () => selectProject(project.app_key, "columns")),
-      actionButton(project.enabled ? "無効化" : "有効化", () => toggleProject(project), "secondary"),
-      actionButton("削除", () => deleteProject(project), "danger")
-    );
+    actions.append(actionButton(t("projects.activities_with_count", { count: Number(project.activity_count ?? 0) }), () => selectProject(project.app_key, "activities"), "primary"));
+    if (canManageProject(project)) actions.append(actionButton(t("message.c6339337ca8d"), () => selectProject(project.app_key, "columns")));
+    if (canDeleteProject(project)) actions.append(actionButton(t("message.5cbdf1fd7082"), () => deleteProject(project), "danger"));
     card.append(header, actions);
     return card;
   }));
@@ -219,29 +344,63 @@ function selectProject(appKey, view) {
   if (!confirmDiscard()) return;
   state.currentApp = appKey;
   state.schemaDirty = false; state.rows = [];
-  populateProjectSelect();
+  populateProjectSelect(); configureConsoleAccess();
   showView(view, true);
 }
 
-async function toggleProject(project) {
-  try {
-    const updated = await request(`projects.php?app=${encodeURIComponent(project.app_key)}`, {
-      method: "PUT", body: JSON.stringify({ enabled: !project.enabled })
-    });
-    replaceProject(updated); renderProjects(); populateProjectSelect();
-    setStatus(`${updated.project_name}を${updated.enabled ? "有効化" : "無効化"}しました。`);
-  } catch (error) { setStatus(`更新に失敗しました: ${error.message}`, true); }
-}
-
 async function deleteProject(project) {
-  if (!confirm(`${project.project_name} (${project.app_key}) を削除しますか？\nActivity本体は削除されません。`)) return;
+  if (!confirm(`${project.project_name} (${project.app_key}${t("message.c8bb899ae504")}`)) return;
   try {
     await request(`projects.php?app=${encodeURIComponent(project.app_key)}`, { method: "DELETE" });
     state.projects = state.projects.filter(item => item.app_key !== project.app_key);
     if (state.currentApp === project.app_key) state.currentApp = state.projects[0]?.app_key || "";
     renderProjects(); populateProjectSelect(); updateUrl();
-    setStatus(`${project.project_name}を削除しました。Activity本体は保持されています。`);
-  } catch (error) { setStatus(`削除に失敗しました: ${error.message}`, true); }
+    setStatus(`${project.project_name}${t("message.bed71fc59d9a")}`);
+  } catch (error) { setStatus(`${t("message.7677abdf5309")}${error.message}`, true); }
+}
+
+async function loadDeletedProjects() {
+  if (!isAdmin()) return;
+  els.trashStatus.textContent = t("message.d1c13ac5cca4");
+  try {
+    const projects = await request("project-trash-data.php");
+    els.trashProjectsBody.replaceChildren(...projects.map(project => {
+      const row = document.createElement("tr");
+      for (const [label, value] of [[t("message.598ab78312d8"), project.project_name], ["app_key", project.app_key], [t("message.9979f7e68dd7"), project.deleted_at], [t("message.d54eb82b87f9"), project.activity_count], [t("message.6aebe956b622"), project.assignment_count]]) {
+        const cell = document.createElement("td"); cell.dataset.label = label; cell.textContent = value ?? ""; row.append(cell);
+      }
+      const actions = document.createElement("td"); actions.className = "trash-actions"; actions.dataset.label = t("message.f3ea6d345e2a");
+      const restore = document.createElement("button"); restore.type = "button"; restore.className = "btn btn-outline-secondary trash-action-button";
+      restore.setAttribute("aria-label", `${project.project_name}${t("message.031021fa2faa")}`); restore.title = t("message.442ee7eb767e");
+      restore.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>';
+      restore.addEventListener("click", () => actOnDeletedProject(project, "restore"));
+      const purge = document.createElement("button"); purge.type = "button"; purge.className = "btn btn-outline-danger trash-action-button";
+      purge.setAttribute("aria-label", `${project.project_name}${t("message.b38ad644a8fa")}`); purge.title = t("message.022f49f83427");
+      purge.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 4h4"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/></svg>';
+      purge.addEventListener("click", () => actOnDeletedProject(project, "purge"));
+      actions.append(restore, purge); row.append(actions); return row;
+    }));
+    els.trashStatus.textContent = `${projects.length}${t("message.c09e69758b62")}`;
+  } catch (error) { els.trashStatus.textContent = `${t("message.39a1228bde4e")}${error.message}`; }
+}
+
+async function actOnDeletedProject(project, action) {
+  if (action === "restore" && !confirm(t("trash.confirm_restore", { name: project.project_name, key: project.app_key }))) return;
+  if (action === "purge") {
+    const entered = prompt(t("trash.confirm_purge", { name: project.project_name, activities: project.activity_count, assignments: project.assignment_count, key: project.app_key }));
+    if (entered !== project.app_key) return;
+  }
+  els.trashStatus.textContent = t("message.f11b0168dcd5");
+  try {
+    await request("project-trash-data.php", { method: "POST", body: JSON.stringify({ action, app_key: project.app_key, confirm_app_key: action === "purge" ? project.app_key : undefined }) });
+    if (action === "restore") {
+      state.projects = await request("projects.php");
+      if (!currentProject()) state.currentApp = state.projects[0]?.app_key || "";
+      renderProjects(); populateProjectSelect(); configureConsoleAccess();
+    }
+    await loadDeletedProjects();
+    els.trashStatus.textContent = `${project.project_name}${t("message.eba95ba0c666")}${action === "restore" ? t("message.442ee7eb767e") : t("message.022f49f83427")}${t("message.00d9ca256f4a")}`;
+  } catch (error) { els.trashStatus.textContent = `${t("message.19a0fb5a8447")}${error.message}`; }
 }
 
 function replaceProject(project) {
@@ -257,7 +416,7 @@ function populateProjectSelect() {
   )));
   els.appSelect.value = state.currentApp;
   const selectedFilter = els.userProjectFilter.value;
-  els.userProjectFilter.replaceChildren(new Option("すべて", ""), ...state.projects.filter(project => project.id !== null).map(project => new Option(project.project_name, project.id)));
+  els.userProjectFilter.replaceChildren(new Option(t("message.c15ccc4dc740"), ""), ...state.projects.filter(project => project.id !== null).map(project => new Option(project.project_name, project.id)));
   els.userProjectFilter.value = selectedFilter;
 }
 
@@ -266,13 +425,13 @@ async function createProject() {
   if (!els.projectForm.reportValidity()) return;
   try {
     const project = await request("projects.php", { method: "POST", body: JSON.stringify({
-      project_name: els.newProjectName.value, app_key: els.newAppKey.value
+      project_name: els.newProjectName.value, app_key: els.newAppKey.value,
+      frontend_url: els.newProjectFrontendUrl.value, frontend_public: els.newProjectFrontendPublic.checked
     }) });
     replaceProject(project); state.currentApp = project.app_key;
-    renderProjects(); populateProjectSelect(); els.projectDialog.close(); els.projectForm.reset();
-    document.querySelectorAll('[data-view="columns"], [data-view="activities"]').forEach(button => { button.disabled = false; });
-    setStatus(`${project.project_name}を作成しました。`); showView("columns", true);
-  } catch (error) { setStatus(`作成に失敗しました: ${error.message}`, true); }
+    renderProjects(); populateProjectSelect(); configureConsoleAccess(); els.projectDialog.close(); els.projectForm.reset();
+    setStatus(`${project.project_name}${t("message.d7239b2491cf")}`); showView("columns", true);
+  } catch (error) { setStatus(`${t("message.16cf5004f021")}${error.message}`, true); }
 }
 
 function orderedFields(schema = state.schema) {
@@ -282,7 +441,8 @@ function orderedFields(schema = state.schema) {
 function openColumns() {
   const project = currentProject(); if (!project) return;
   state.schema = structuredClone(project.schema || { fields: {} }); state.schemaDirty = false;
-  els.columnsProjectKey.textContent = project.app_key; els.projectName.value = project.project_name; els.projectEnabled.checked = project.enabled;
+  els.columnsProjectKey.textContent = project.app_key; els.projectName.value = project.project_name;
+  els.projectFrontendUrl.value = project.frontend_url || ""; els.projectFrontendPublic.checked = Boolean(project.frontend_public);
   renderColumnsTable();
   updateSchemaDirty();
 }
@@ -305,7 +465,7 @@ function columnDefinitionRow(field = "", definition = {}) {
 
 function renderColumnsTable() {
   if (typeof window.Tabulator !== "function") {
-    throw new Error("Tabulatorを読み込めません。ネットワーク接続またはContent Security Policyを確認してください。");
+    throw new Error(t("message.69bf481d3ba3"));
   }
   const data = orderedFields().map(([field, definition]) => columnDefinitionRow(field, definition));
   state.columnsTable?.destroy();
@@ -313,8 +473,8 @@ function renderColumnsTable() {
     data,
     index: "cmmColumnKey",
     height: "100%",
-    layout: "fitDataTable",
-    placeholder: "カラムはありません。",
+    layout: "fitData",
+    placeholder: t("message.5320d71b2d56"),
     validationMode: "highlight",
     movableRows: true,
     editTriggerEvent: "click",
@@ -325,22 +485,22 @@ function renderColumnsTable() {
       { field: "cmmColumnKey", visible: false, download: false },
       { title: "field", field: "field", editor: "input", width: 180, minWidth: 130,
         validator: (_cell, value) => printable(value).trim().length >= 1 && printable(value).trim().length <= 64 },
-      { title: "表示名", field: "label", editor: "input", width: 220, minWidth: 140,
+      { title: t("message.67c008e4fd30"), field: "label", editor: "input", width: 220, minWidth: 140,
         validator: (_cell, value) => printable(value).trim().length >= 1 && printable(value).trim().length <= 255 },
-      { title: "型", field: "type", editor: "list", editorParams: { values: fieldTypes }, width: 130 },
+      { title: t("message.1496fa30a1d2"), field: "type", editor: "list", editorParams: { values: fieldTypes }, width: 130 },
       ...["required", "visible", "editable"].map((field, index) => ({
-        title: ["必須", "表示", "編集"][index], field, editor: "tickCross", formatter: "tickCross",
+        title: [t("message.df7b17a1e3d8"), t("message.a46924362170"), t("message.d107b864c378")][index], field, editor: "tickCross", formatter: "tickCross",
         formatterParams: { allowEmpty: false }, hozAlign: "center", headerHozAlign: "center", width: 74
       })),
-      { title: "幅(px)", field: "width", editor: "number", editorParams: { min: 80, max: 800 }, sorter: "number", width: 100,
+      { title: t("message.f677b2368d17"), field: "width", editor: "number", editorParams: { min: 80, max: 800 }, sorter: "number", width: 100,
         validator: (_cell, value) => Number.isInteger(Number(value)) && Number(value) >= 80 && Number(value) <= 800 },
-      { title: "選択肢（1行1件）", field: "options", editor: columnOptionsEditor,
+      { title: t("message.230e04ab4e6c"), field: "options", editor: columnOptionsEditor,
         editable: cell => optionFieldTypes.has(printable(cell.getRow().getData().type)),
         formatter: "textarea", variableHeight: true, width: 300, minWidth: 200 },
-      { title: "操作", headerSort: false, width: 86, minWidth: 86, formatter: () => {
-        const button = document.createElement("button"); button.type = "button"; button.className = "btn btn-sm btn-outline-danger column-delete-button"; button.textContent = "削除"; return button;
+      { title: t("message.f3ea6d345e2a"), headerSort: false, width: 86, minWidth: 86, formatter: () => {
+        const button = document.createElement("button"); button.type = "button"; button.className = "btn btn-sm btn-outline-danger column-delete-button"; button.textContent = t("message.5cbdf1fd7082"); return button;
       }, cellClick: (_event, cell) => {
-        if (!confirm("このカラムをSchemaから外しますか？既存ActivityのJSON値は保持されます。")) return;
+        if (!confirm(t("message.3bb9a0a9421e"))) return;
         cell.getRow().delete(); markSchemaDirty();
       } }
     ]
@@ -389,16 +549,16 @@ function collectSchema() {
   const rows = state.columnsTable ? state.columnsTable.getRows("active").map(row => row.getData()) : [];
   rows.forEach((row, order) => {
     const field = printable(row.field).trim();
-    if (!field || seen.has(field)) throw new Error(!field ? "fieldは空にできません。" : `field ${field} が重複しています。`);
-    if (field.length > 64) throw new Error(`field ${field} は64文字以内にしてください。`);
+    if (!field || seen.has(field)) throw new Error(!field ? t("message.b105e2f606dc") : `field ${field}${t("message.70ef8b848b4d")}`);
+    if (field.length > 64) throw new Error(`field ${field}${t("message.1856bcaa3cae")}`);
     seen.add(field);
     const type = printable(row.type);
-    if (!fieldTypes.includes(type)) throw new Error(`field ${field} の型が不正です。`);
+    if (!fieldTypes.includes(type)) throw new Error(`field ${field}${t("message.8167fcdb1889")}`);
     const label = printable(row.label).trim();
-    if (!label) throw new Error(`field ${field} の表示名は空にできません。`);
-    if (label.length > 255) throw new Error(`field ${field} の表示名は255文字以内にしてください。`);
+    if (!label) throw new Error(`field ${field}${t("message.e6d71d2c58e6")}`);
+    if (label.length > 255) throw new Error(`field ${field}${t("message.21ddbfadb9fe")}`);
     const width = Number(row.width);
-    if (!Number.isInteger(width) || width < 80 || width > 800) throw new Error(`field ${field} の幅は80〜800の整数にしてください。`);
+    if (!Number.isInteger(width) || width < 80 || width > 800) throw new Error(`field ${field}${t("message.ddb13b8fa27e")}`);
     const definition = {
       label, type, required: Boolean(row.required), order,
       admin: { visible: Boolean(row.visible), editable: Boolean(row.editable), width }
@@ -416,17 +576,18 @@ function collectSchema() {
 
 async function saveColumns() {
   if (state.columnsTable && state.columnsTable.validate() !== true) {
-    setStatus("入力内容に誤りがあります。赤く表示されたセルを確認してください。", true); return;
+    setStatus(t("message.84e9e565bf53"), true); return;
   }
   let schema;
   try { schema = collectSchema(); } catch (error) { setStatus(error.message, true); return; }
   try {
     const updated = await request(`projects.php?app=${encodeURIComponent(state.currentApp)}`, { method: "PUT", body: JSON.stringify({
-      project_name: els.projectName.value, enabled: els.projectEnabled.checked, schema
+      project_name: els.projectName.value,
+      frontend_url: els.projectFrontendUrl.value, frontend_public: els.projectFrontendPublic.checked, schema
     }) });
     replaceProject(updated); state.schemaDirty = false; renderColumnsTable(); updateSchemaDirty(); renderProjects(); populateProjectSelect();
-    setStatus("Project名とカラム定義を保存しました。既存ActivityのJSONは変更していません。");
-  } catch (error) { setStatus(`カラム定義の保存に失敗しました: ${error.message}`, true); }
+    setStatus(t("message.56c66905dc25"));
+  } catch (error) { setStatus(`${t("message.cef70d9b3017")}${error.message}`, true); }
 }
 
 async function loadActivities(force = false) {
@@ -435,32 +596,34 @@ async function loadActivities(force = false) {
   if (!project) {
     state.activityTable?.destroy(); state.activityTable = null; state.rows = [];
     state.newActivityRows.clear(); state.deletedActivityRows.clear(); state.dirtyActivityFields.clear();
-    els.activitiesProjectKey.textContent = "割り当てなし"; els.appSelect.replaceChildren();
+    setFrontendLink(els.activitiesFrontendLink, null); els.appSelect.replaceChildren();
     els.jsonExport.removeAttribute("href"); els.csvExport.removeAttribute("href");
-    updateDirtyControls(); setStatus("割り当てられたProjectがありません。管理者へ割り当てを依頼してください。", true);
+    updateDirtyControls(); setStatus(t("message.3728e237b3ef"), true);
     return;
   }
   state.schema = project.schema || { fields: {} }; els.search.value = "";
-  els.activitiesProjectKey.textContent = `${project.app_key}${project.access_role && project.access_role !== "admin" ? ` / ${project.access_role}` : ""}`; els.appSelect.value = project.app_key;
-  setStatus("Activitiesを読み込み中…", false, false);
+  setFrontendLink(els.activitiesFrontendLink, project.frontend_url); els.appSelect.value = project.app_key;
+  setStatus(t("message.59d659673552"), false, false);
   try {
     const rows = await request(`activities.php?app=${encodeURIComponent(state.currentApp)}`);
     state.newActivityRows.clear(); state.deletedActivityRows.clear(); state.dirtyActivityFields.clear();
     state.rows = rows.map(row => ({ ...row, cmmRowKey: `saved-${row.id}` }));
+    project.activity_count = rows.length;
+    renderProjects();
     updateExportLinks(); renderActivityTable(); updateDirtyControls();
-    setStatus(`${rows.length}件のActivityを読み込みました。${canWriteActivities(project) ? "" : " このProjectは閲覧のみです。"}`, false, false);
-  } catch (error) { setStatus(`読み込みに失敗しました: ${error.message}`, true); }
+    setStatus(`${rows.length}${t("message.9b6015e28745")}${canWriteActivities(project) ? "" : t("message.998135a8a918")}`, false, false);
+  } catch (error) { setStatus(`${t("message.39a1228bde4e")}${error.message}`, true); }
 }
 
 function activityColumns() {
   const system = [
-    { field: "id", label: "Activity ID", type: "text", admin: { width: 210 } },
+    { field: "id", label: t("message.66ac32497808"), type: "text", admin: { width: 210 } },
     { field: "osmid", label: "OSM ID", type: "text", required: true, admin: { width: 150 } },
-    { field: "latitude", label: "緯度", type: "number", admin: { width: 140, editable: false } },
-    { field: "longitude", label: "経度", type: "number", admin: { width: 140, editable: false } },
+    { field: "latitude", label: t("message.aee1a47ed194"), type: "number", admin: { width: 140, editable: false } },
+    { field: "longitude", label: t("message.6b136ced4af4"), type: "number", admin: { width: 140, editable: false } },
     { field: "form_key", label: "Form", type: "text", admin: { width: 110 } },
-    { field: "created_at", label: "作成日時", type: "text", admin: { width: 160, editable: false } },
-    { field: "updated_at", label: "更新日時", type: "text", admin: { width: 160, editable: false } }
+    { field: "created_at", label: t("message.25293dc60993"), type: "text", admin: { width: 160, editable: false } },
+    { field: "updated_at", label: t("message.504d4c11e0f5"), type: "text", admin: { width: 160, editable: false } }
   ];
   const dynamic = orderedFields().filter(([, def]) => def.admin?.visible !== false).map(([field, def]) => ({ field, ...def }));
   return [...system, ...dynamic];
@@ -468,14 +631,14 @@ function activityColumns() {
 
 function renderActivityTable() {
   if (typeof window.Tabulator !== "function") {
-    throw new Error("Tabulatorを読み込めません。ネットワーク接続またはContent Security Policyを確認してください。");
+    throw new Error(t("message.69bf481d3ba3"));
   }
   state.activityTable?.destroy();
   state.activityTable = new window.Tabulator(els.activityTable, {
     data: state.rows,
     index: "cmmRowKey",
     layout: "fitDataTable",
-    placeholder: "Activityはありません。",
+    placeholder: t("message.4a010c466653"),
     validationMode: "highlight",
     selectableRange: 1,
     selectableRangeColumns: true,
@@ -490,10 +653,10 @@ function renderActivityTable() {
     clipboardPasteParser: "range",
     clipboardPasteAction: "range",
     rowHeader: { resizable: false, width: 42, hozAlign: "center", formatter: "rownum", cssClass: "range-header-col", editor: false, headerSort: false, headerFilter: false },
-    columnDefaults: { resizable: "header", headerFilter: "input", headerFilterPlaceholder: '絞り込み（空欄: ""）' },
+    columnDefaults: { resizable: "header", headerFilter: "input", headerFilterPlaceholder: t("message.cd46f1f0c21c") },
     columns: [
       { field: "cmmRowKey", visible: false, headerSort: false, headerFilter: false, clipboard: false, download: false },
-      { title: "操作", width: 92, minWidth: 92, headerSort: false, headerFilter: false, clipboard: false, download: false, formatter: deleteActionFormatter, cellClick: deleteActionClick },
+      { title: t("message.f3ea6d345e2a"), width: 92, minWidth: 92, headerSort: false, headerFilter: false, clipboard: false, download: false, formatter: deleteActionFormatter, cellClick: deleteActionClick },
       ...activityColumns().map(tabulatorColumn)
     ],
     rowFormatter: formatActivityRow
@@ -575,7 +738,7 @@ function deleteActionFormatter(cell) {
   const deleted = state.deletedActivityRows.has(key); const newRow = isNewActivityKey(key);
   button.dataset.rowKey = key; button.dataset.newRow = String(newRow);
   button.type = "button"; button.className = `btn btn-sm activity-delete-button ${deleted ? "btn-outline-secondary" : "btn-outline-danger"}`;
-  button.textContent = deleted ? "元に戻す" : (newRow ? "破棄" : "削除");
+  button.textContent = deleted ? t("message.c7f325f13f16") : (newRow ? t("message.a328a2d80d00") : t("message.5cbdf1fd7082"));
   return button;
 }
 
@@ -639,7 +802,7 @@ async function addActivityRow() {
     state.rows.unshift(row);
   }
   updateDirtyControls();
-  setStatus("新しい行を追加しました。一括保存するまでDBには反映されません。");
+  setStatus(t("message.754fe5ec5a62"), false, false);
 }
 
 function toggleDelete(row, rowComponent = null, rowKey = row.cmmRowKey, newRow = isNewActivityKey(rowKey)) {
@@ -679,13 +842,13 @@ async function saveAll() {
     requiredColumns.forEach(column => {
       const value = row[column.field];
       if (Array.isArray(value) ? value.length === 0 : printable(value).trim() === "") {
-        invalid.push({ key, id: row.id || "新しい行", field: column.field, label: column.label || column.field });
+        invalid.push({ key, id: row.id || t("message.1f4f028acd27"), field: column.field, label: column.label || column.field });
       }
     });
   });
   if (invalid.length) {
     const first = invalid[0];
-    setStatus(`保存する行に必須項目の空欄が${invalid.length}件あります。最初のエラー: ${first.id} / ${first.label}。`, true);
+    setStatus(`${t("message.b28a6f170b5b")}${invalid.length}${t("message.6029cc794ccf")}${first.id} / ${first.label}。`, true);
     if (state.activityTable) {
       els.search.value = "";
       state.activityTable.clearFilter();
@@ -707,19 +870,19 @@ async function saveAll() {
     else if (isNewActivityKey(key)) payload.creates.push(rowPayload(row));
     else if (state.dirtyActivityFields.has(key)) payload.updates.push(rowPayload(row));
   });
-  setStatus("変更をトランザクションで一括保存中…"); els.saveAllButton.disabled = true;
+  setStatus(t("message.eb7b20a3ab69")); els.saveAllButton.disabled = true;
   try {
     const result = await request("activities-batch.php", { method: "POST", body: JSON.stringify(payload) });
     await loadActivities(true);
-    setStatus(`一括保存しました（追加${result.created.length}・更新${result.updated.length}・削除${result.deleted.length}）。`);
-  } catch (error) { updateDirtyControls(); setStatus(`一括保存に失敗しました。DBはロールバックされ、編集内容は画面に保持されています: ${error.message}`, true); }
+    setStatus(`${t("message.ec65daeb370f")}${result.created.length}${t("message.b3a91fbe7826")}${result.updated.length}${t("message.da31817c08d1")}${result.deleted.length}）。`);
+  } catch (error) { updateDirtyControls(); setStatus(`${t("message.db1615e70550")}${error.message}`, true); }
 }
 
 function updateDirtyControls() {
   const keys = new Set([...state.newActivityRows, ...state.deletedActivityRows, ...state.dirtyActivityFields.keys()]);
   const count = keys.size;
   const writable = canWriteActivities();
-  els.addButton.disabled = !writable; els.saveAllButton.disabled = !writable || count === 0; els.discardButton.disabled = !writable || count === 0; els.dirtyCount.textContent = count ? `(${count})` : "";
+  els.addButton.disabled = !writable; els.saveAllButton.disabled = !writable || count === 0; els.discardButton.disabled = !writable || count === 0; els.dirtyCount.textContent = count ? String(count) : "";
 }
 
 function applyGlobalActivityFilter() {
@@ -741,35 +904,35 @@ async function importFile(file) {
   const text = await file.text();
   if (file.name.toLowerCase().endsWith(".csv") || file.type === "text/csv") return previewCsv(text);
   let rows;
-  try { rows = JSON.parse(text); } catch { setStatus("JSONファイルを解析できません。", true); return; }
-  if (!Array.isArray(rows)) { setStatus("Import JSONはActivity配列にしてください。", true); return; }
+  try { rows = JSON.parse(text); } catch { setStatus(t("message.1b2142b04ce8"), true); return; }
+  if (!Array.isArray(rows)) { setStatus(t("message.92cc85e6f8be"), true); return; }
   try {
     const dry = await request("activity-import.php", { method: "POST", body: JSON.stringify({ app: state.currentApp, rows, dry_run: true }) });
-    if (!confirm(`${dry.valid}件（新規${dry.created}・更新${dry.updated}）を取り込みますか？`)) return;
+    if (!confirm(`${dry.valid}${t("message.44ca537d5ac0")}${dry.created}${t("message.b3a91fbe7826")}${dry.updated}${t("message.3e4f7bd641f7")}`)) return;
     await request("activity-import.php", { method: "POST", body: JSON.stringify({ app: state.currentApp, rows, dry_run: false }) });
-    await loadActivities(true); setStatus(`${dry.valid}件を取り込みました。`);
-  } catch (error) { setStatus(`Importに失敗しました: ${error.message}`, true); }
+    await loadActivities(true); setStatus(`${dry.valid}${t("message.1e476909030d")}`);
+  } catch (error) { setStatus(`${t("message.d247983650d6")}${error.message}`, true); }
   finally { els.importFile.value = ""; }
 }
 
 async function previewCsv(csv) {
   try {
     const preview = await request("activity-import-csv.php", { method: "POST", body: JSON.stringify({ app: state.currentApp, csv, dry_run: true }) });
-    state.pendingCsv = { csv, preview }; els.csvSummary.textContent = `${preview.valid}件（新規${preview.created}・更新${preview.updated}）`;
+    state.pendingCsv = { csv, preview }; els.csvSummary.textContent = `${preview.valid}${t("message.44ca537d5ac0")}${preview.created}${t("message.b3a91fbe7826")}${preview.updated}）`;
     const updateFields = preview.schema_update_fields || preview.missing_fields || [];
     const details = [];
-    if (preview.missing_fields?.length) details.push(`未定義カラム: ${preview.missing_fields.join(", ")}`);
+    if (preview.missing_fields?.length) details.push(`${t("message.70ef5e74ea5a")}${preview.missing_fields.join(", ")}`);
     const typeChanges = Object.entries(preview.schema_changes || {}).filter(([, change]) => change.type)
       .map(([field, change]) => `${field}: ${change.type.from} → ${change.type.to}`);
-    if (typeChanges.length) details.push(`型変更: ${typeChanges.join(", ")}`);
+    if (typeChanges.length) details.push(`${t("message.3b003c713424")}${typeChanges.join(", ")}`);
     const optionChanges = Object.entries(preview.schema_changes || {}).filter(([, change]) => change.added_options?.length)
       .map(([field, change]) => `${field}: +${change.added_options.join(", +")}`);
-    if (optionChanges.length) details.push(`選択肢追加: ${optionChanges.join(" / ")}`);
-    const normalized = Object.entries(preview.normalizations || {}).map(([field, count]) => `${field} ${count}件`);
-    if (normalized.length) details.push(`値の正規化: ${normalized.join(", ")}`);
-    els.csvMissing.textContent = details.length ? details.join("\n") : "Schema変更や値の正規化はありません。";
+    if (optionChanges.length) details.push(`${t("message.6794f6098f2e")}${optionChanges.join(" / ")}`);
+    const normalized = Object.entries(preview.normalizations || {}).map(([field, count]) => `${field} ${count}${t("message.04d7e6fc2cc7")}`);
+    if (normalized.length) details.push(`${t("message.96b2c74f5454")}${normalized.join(", ")}`);
+    els.csvMissing.textContent = details.length ? details.join("\n") : t("message.869f659a5257");
     els.addMissingLabel.hidden = updateFields.length === 0; els.addMissingColumns.checked = true; els.csvDialog.showModal();
-  } catch (error) { setStatus(`CSVの確認に失敗しました: ${error.message}`, true); els.importFile.value = ""; }
+  } catch (error) { setStatus(`${t("message.b4381a45f284")}${error.message}`, true); els.importFile.value = ""; }
 }
 
 async function applyCsv() {
@@ -784,8 +947,8 @@ async function applyCsv() {
     }
     await request("activity-import-csv.php", { method: "POST", body: JSON.stringify({ app: state.currentApp, csv: pending.csv, dry_run: false }) });
     state.pendingCsv = null; els.csvDialog.close(); els.importFile.value = ""; await loadActivities(true);
-    setStatus(`${pending.preview.valid}件のCSVを取り込みました。`);
-  } catch (error) { setStatus(`CSV importに失敗しました: ${error.message}`, true); }
+    setStatus(`${pending.preview.valid}${t("message.f899fc5cca61")}`);
+  } catch (error) { setStatus(`${t("message.6ccd0903edcc")}${error.message}`, true); }
 }
 
 async function loadUsers(resetPage = false) {
@@ -796,30 +959,44 @@ async function loadUsers(resetPage = false) {
   if (els.userVerifiedFilter.value) params.set("verified", els.userVerifiedFilter.value);
   if (els.userRoleFilter.value) params.set("role", els.userRoleFilter.value);
   if (els.userProjectFilter.value) params.set("project_id", els.userProjectFilter.value);
-  setStatus("ユーザー一覧を読み込み中…", false, false);
+  setStatus(t("message.9ac20e559949"), false, false);
   try {
     const result = await request(`admin-users.php?${params}`);
     state.users = result.items; state.userPagination = result.pagination; renderUsers();
-    setStatus(`${result.pagination.total}件のユーザーを読み込みました。`, false, false);
-  } catch (error) { setStatus(`ユーザー一覧の取得に失敗しました: ${error.message}`, true); }
+    setStatus(`${result.pagination.total}${t("message.f0450f797116")}`, false, false);
+  } catch (error) { setStatus(`${t("message.1e9b249c15c2")}${error.message}`, true); }
 }
 
 function renderUsers() {
   els.usersBody.replaceChildren(...state.users.map(user => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${escapeHtml(user.userid)}</td><td>${escapeHtml(user.email || "—")}</td>
-      <td><span class="status-badge ${escapeAttribute(user.status)}">${escapeHtml(user.status)}</span></td>
-      <td>${escapeHtml(user.role)}</td><td>${user.email ? (user.email_verified_at ? "確認済み" : "未確認") : "対象外"}</td>
-      <td>${escapeHtml(user.last_login_at || "-")}</td><td>${user.activity_count}</td><td>${user.project_count}</td>
-      <td>${escapeHtml(user.updated_at)}</td><td></td>`;
-    tr.lastElementChild.append(actionButton("詳細", () => openUser(user.id)));
+    const statusIcons = {
+      active: '<path d="m5 12 4 4L19 6"/>',
+      pending: '<circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/>',
+      disabled: '<circle cx="12" cy="12" r="8"/><path d="M6 6l12 12"/>'
+    };
+    const statusIcon = statusIcons[user.status] || '<circle cx="12" cy="12" r="8"/>';
+    tr.innerHTML = `<td><span class="user-name-actions"><button class="user-status-icon status-${escapeAttribute(user.status)}" type="button" aria-label="${escapeAttribute(user.userid)}${t("message.f2ec10125b6a")}${escapeAttribute(user.status)}${t("message.e48726ed6fbc")}${escapeAttribute(user.status)}${t("message.a73af58f19b7")}${statusIcon}</svg></button><span class="user-name">${escapeHtml(user.userid)}</span></span></td><td>${escapeHtml(user.email || "—")}</td>
+      <td>${escapeHtml(user.role)}</td><td>${user.email ? (user.email_verified_at ? t("message.1f12f1d2e9de") : t("message.8ac888c7718d")) : ""}</td>
+      <td>${escapeHtml(user.last_login_at || "-")}</td><td>${user.owned_project_count}</td><td>${user.project_count}</td><td></td>`;
+    tr.querySelectorAll("td").forEach((cell, index) => {
+      cell.dataset.label = [t("message.c30499da17fc"), t("message.32ed60ff9f0c"), t("message.200de0cf73dd"), t("message.dddb07c1bf41"), t("message.c993ef4c6b59"), t("message.5b8068de67f5"), t("message.ecf536eb2831"), t("message.f3ea6d345e2a")][index];
+    });
+    tr.querySelector(".user-status-icon").addEventListener("click", () => openUser(user.id));
+    const resetButton = actionButton("", () => openPasswordReset(user.id));
+    resetButton.classList.add("user-password-button");
+    resetButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m11 12 8-8 2 2-2 2 1 1-2 2-1-1-3 3"/></svg>';
+    resetButton.setAttribute("aria-label", `${user.userid}${t("message.4ec88ab9e1fb")}`);
+    resetButton.title = t("message.ffaa3e6f99de");
+    tr.querySelector(".user-name-actions").append(resetButton);
+    tr.lastElementChild.append(actionButton(t("message.12d470debc6c"), () => openUser(user.id)));
     return tr;
   }));
   if (!state.users.length) {
-    const tr = document.createElement("tr"); const td = document.createElement("td"); td.colSpan = 10; td.textContent = "該当するユーザーはいません。"; tr.append(td); els.usersBody.append(tr);
+    const tr = document.createElement("tr"); tr.className = "users-empty-row"; const td = document.createElement("td"); td.colSpan = 8; td.textContent = t("message.4d6206aa7961"); tr.append(td); els.usersBody.append(tr);
   }
   const pagination = state.userPagination || { page: 1, total_pages: 1, total: 0 };
-  els.usersPageInfo.textContent = `${pagination.page} / ${pagination.total_pages}ページ（${pagination.total}件）`;
+  els.usersPageInfo.textContent = `${pagination.page} / ${pagination.total_pages}${t("message.1936d001a9c3")}${pagination.total}${t("message.5b2d4f518226")}`;
   els.usersPrevButton.disabled = pagination.page <= 1;
   els.usersNextButton.disabled = pagination.page >= pagination.total_pages;
 }
@@ -827,17 +1004,44 @@ function renderUsers() {
 function renderProjectAssignments(container, assignments = []) {
   const selected = new Map(assignments.map(item => [Number(item.project_id), item.role || "editor"]));
   const projects = state.projects.filter(project => project.id !== null);
-  container.replaceChildren(...projects.map(project => {
+  if (!projects.length) { container.textContent = t("message.57c6b820d3d1"); return; }
+  const controls = document.createElement("div"); controls.className = "project-assignment-controls";
+  const filterTitle = document.createElement("p"); filterTitle.className = "project-assignment-filter-title"; filterTitle.textContent = t("message.177609d3edb9");
+  const filterRow = document.createElement("div"); filterRow.className = "project-assignment-filter-row";
+  const search = document.createElement("input"); search.type = "search"; search.className = "form-control";
+  search.placeholder = t("message.d9961985b1b2"); search.setAttribute("aria-label", t("message.e6de7a3103aa"));
+  const searchLabel = document.createElement("label"); searchLabel.className = "project-assignment-search";
+  searchLabel.append(document.createTextNode(t("message.73c7fc7c7843")), search);
+  const selectedOnly = document.createElement("label");
+  const selectedOnlyCheckbox = document.createElement("input"); selectedOnlyCheckbox.type = "checkbox";
+  selectedOnly.append(selectedOnlyCheckbox, document.createTextNode(t("message.7fbf9d99a9fb")));
+  const count = document.createElement("span"); count.className = "project-assignment-count";
+  filterRow.append(searchLabel, selectedOnly); controls.append(filterTitle, filterRow, count);
+  const list = document.createElement("div"); list.className = "project-assignment-list";
+  const rows = projects.map(project => {
     const row = document.createElement("div"); row.className = "project-assignment"; row.dataset.projectId = project.id;
     const checkbox = document.createElement("input"); checkbox.type = "checkbox"; checkbox.checked = selected.has(Number(project.id));
     const label = document.createElement("label"); label.append(checkbox, document.createTextNode(`${project.project_name} (${project.app_key})`));
     const role = document.createElement("select");
     role.append(new Option("viewer", "viewer"), new Option("editor", "editor"), new Option("project_admin", "project_admin"));
     role.value = selected.get(Number(project.id)) || "editor"; role.disabled = !checkbox.checked;
-    checkbox.addEventListener("change", () => { role.disabled = !checkbox.checked; });
+    checkbox.addEventListener("change", () => { role.disabled = !checkbox.checked; updateFilter(); });
     row.append(label, role); return row;
-  }));
-  if (!projects.length) container.textContent = "DB管理のProjectはありません。";
+  });
+  function updateFilter() {
+    const query = search.value.trim().toLocaleLowerCase();
+    let visible = 0; let assigned = 0;
+    rows.forEach(row => {
+      const checked = row.querySelector('input[type="checkbox"]').checked;
+      if (checked) assigned++;
+      row.hidden = (selectedOnlyCheckbox.checked && !checked) || !row.textContent.toLocaleLowerCase().includes(query);
+      if (!row.hidden) visible++;
+    });
+    count.textContent = `${assigned}${t("message.15beec700d96")}${visible}${t("message.4e686c3a9744")}${rows.length}${t("message.5b2d4f518226")}`;
+  }
+  list.replaceChildren(...rows); container.replaceChildren(controls, list);
+  search.addEventListener("input", updateFilter); selectedOnlyCheckbox.addEventListener("change", updateFilter);
+  updateFilter();
 }
 
 function collectProjectAssignments(container) {
@@ -846,31 +1050,78 @@ function collectProjectAssignments(container) {
   }));
 }
 
+function renderUserMetadata(user) {
+  const metadata = [
+    [t("message.c30499da17fc"), user.userid], [t("message.32ed60ff9f0c"), user.email || t("message.64bdfa48f26c")],
+    ...(user.email ? [[t("message.dddb07c1bf41"), user.email_verified_at || t("message.8ac888c7718d")]] : []),
+    [t("message.66d381a4cbfe"), user.created_at], [t("message.c993ef4c6b59"), user.last_login_at || "-"],
+    [t("message.f64218e0d95e"), `${user.activity_count}${t("message.04d7e6fc2cc7")}`], [t("message.371d2b828cdb"), `${user.project_count}${t("message.04d7e6fc2cc7")}`]
+  ];
+  els.userMetadata.replaceChildren(...metadata.flatMap(([label, value]) => {
+    const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; return [dt, dd];
+  }));
+}
+
+function configureUserEmail(user) {
+  const hasEmail = !!user.email;
+  const unverified = hasEmail && !user.email_verified_at;
+  els.userAddEmailSection.hidden = hasEmail;
+  els.userMailActions.hidden = !unverified || user.status === "disabled";
+  els.userMailAddress.textContent = user.email || "";
+  els.userMailDescription.textContent = t("message.b9553404635f");
+  els.resendVerificationButton.hidden = !unverified || user.status === "disabled";
+}
+
 async function openUser(id) {
   try {
     const user = await request(`admin-users.php?id=${encodeURIComponent(id)}`); state.currentUser = user;
-    els.userDialogTitle.textContent = `ユーザー: ${user.userid}`;
-    const metadata = [
-      ["ユーザーID", user.userid], ["メール", user.email || "未登録"], ["メール確認", user.email ? (user.email_verified_at || "未確認") : "対象外"],
-      ["登録日時", user.created_at], ["更新日時", user.updated_at], ["最終ログイン", user.last_login_at || "-"],
-      ["投稿Activity", `${user.activity_count}件`], ["利用Project", `${user.project_count}件`]
-    ];
-    els.userMetadata.replaceChildren(...metadata.flatMap(([label, value]) => {
-      const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; return [dt, dd];
-    }));
+    els.userDialogTitle.textContent = `${t("message.d1e5f8a1131f")}${user.userid}`;
+    renderUserMetadata(user);
     els.editUserStatus.value = user.status; els.editUserRole.value = user.role;
     renderProjectAssignments(els.editUserProjects, user.projects);
-    els.resendVerificationButton.disabled = !user.email || user.status !== "pending";
-    els.sendPasswordResetButton.disabled = !user.email || user.status === "disabled";
+    configureUserEmail(user);
+    els.addUserEmail.value = ""; els.userEmailStatus.textContent = ""; els.userEmailStatus.classList.remove("error");
+    els.userDialog.showModal();
+  } catch (error) { setStatus(`${t("message.7bb7ae898ea3")}${error.message}`, true); }
+}
+
+async function openPasswordReset(id) {
+  try {
+    const user = await request(`admin-users.php?id=${encodeURIComponent(id)}`);
+    state.passwordUser = user;
+    els.passwordResetTitle.textContent = `${user.userid}${t("message.4ec88ab9e1fb")}`;
+    els.passwordResetEmailSection.hidden = !user.email || user.status === "disabled" || (user.status === "active" && !user.email_verified_at);
+    els.passwordResetEmailAddress.textContent = user.email || "";
     els.editUserPassword.value = ""; els.editUserPassword.setCustomValidity("");
     els.editUserPasswordConfirmation.value = ""; els.editUserPasswordConfirmation.setCustomValidity("");
     els.userPasswordStatus.textContent = "";
-    els.userRecentActivities.replaceChildren(...user.recent_activities.map(activity => {
-      const li = document.createElement("li"); li.textContent = `${activity.updated_at}  ${activity.app_key} / ${activity.activity_key}`; return li;
-    }));
-    if (!user.recent_activities.length) { const li = document.createElement("li"); li.textContent = "Activityはありません。"; els.userRecentActivities.append(li); }
-    els.userDialog.showModal();
-  } catch (error) { setStatus(`ユーザー詳細の取得に失敗しました: ${error.message}`, true); }
+    els.passwordResetDialog.showModal();
+  } catch (error) { setStatus(`${t("message.710454a8b117")}${error.message}`, true); }
+}
+
+async function addUserEmail() {
+  const user = state.currentUser;
+  if (!user || user.email || !els.addUserEmail.reportValidity()) return;
+  const email = els.addUserEmail.value.trim();
+  if (!confirm(`${user.userid}${t("message.9ceb96186bb1")}${email}${t("message.e60e09179e7c")}`)) return;
+  els.addUserEmailButton.disabled = true;
+  els.userEmailStatus.textContent = t("message.e997427e4e70");
+  els.userEmailStatus.classList.remove("error");
+  try {
+    const updated = await request("admin-users.php", { method: "POST", body: JSON.stringify({ action: "add_email", id: user.id, email }) });
+    state.currentUser = updated;
+    renderUserMetadata(updated); configureUserEmail(updated);
+    els.userEmailStatus.textContent = updated.verification_email_sent
+      ? t("message.0fbb049e2b0b")
+      : t("message.5c846cc26118");
+    els.userEmailStatus.classList.toggle("error", !updated.verification_email_sent);
+    await loadUsers();
+  } catch (error) {
+    els.userEmailStatus.textContent = error.code === "identity_already_registered"
+      ? t("message.5f0e428c4023")
+      : `${t("message.17e0a556aaad")}${error.message}`;
+    els.userEmailStatus.classList.add("error");
+  } finally { els.addUserEmailButton.disabled = false; }
 }
 
 async function saveUser() {
@@ -879,14 +1130,14 @@ async function saveUser() {
     const updated = await request(`admin-users.php?id=${encodeURIComponent(user.id)}`, { method: "PUT", body: JSON.stringify({
       status: els.editUserStatus.value, role: els.editUserRole.value, projects: collectProjectAssignments(els.editUserProjects)
     }) });
-    state.currentUser = updated; els.userDialog.close(); await loadUsers(); setStatus(`${updated.userid}を更新しました。`);
-  } catch (error) { setStatus(`ユーザー更新に失敗しました: ${error.message}`, true); }
+    state.currentUser = updated; els.userDialog.close(); await loadUsers(); setStatus(`${updated.userid}${t("message.cf20183f45da")}`);
+  } catch (error) { setStatus(`${t("message.162eb73dc227")}${error.message}`, true); }
 }
 
 async function createUser() {
   updateNewUserMode();
   const direct = els.newUserEmail.value.trim() === "";
-  els.newUserPasswordConfirmation.setCustomValidity(direct && els.newUserPassword.value !== els.newUserPasswordConfirmation.value ? "初期パスワードが一致しません。" : "");
+  els.newUserPasswordConfirmation.setCustomValidity(direct && els.newUserPassword.value !== els.newUserPasswordConfirmation.value ? t("message.4ecb0d950894") : "");
   if (!els.newUserForm.reportValidity()) return;
   try {
     const payload = {
@@ -899,9 +1150,9 @@ async function createUser() {
     }
     const user = await request("admin-users.php", { method: "POST", body: JSON.stringify(payload) });
     els.newUserDialog.close(); els.newUserForm.reset(); updateNewUserMode(); await loadUsers(true);
-    if (user.creation_mode === "direct") setStatus(`${user.userid}を追加しました。初期パスワードでログインできます。`);
-    else setStatus(`${user.userid}を招待しました。パスワード設定メール: ${user.password_setup_email_sent ? "送信済み" : "送信失敗"}`);
-  } catch (error) { setStatus(`ユーザー作成に失敗しました: ${error.message}`, true); }
+    if (user.creation_mode === "direct") setStatus(`${user.userid}${t("message.1211d9d9b99b")}`);
+    else setStatus(`${user.userid}${t("message.445aa521e166")}${user.password_setup_email_sent ? t("message.0fb2d276b267") : t("message.fb57928a121b")}`);
+  } catch (error) { setStatus(`${t("message.462841e38d21")}${error.message}`, true); }
 }
 
 function updateNewUserMode() {
@@ -909,49 +1160,49 @@ function updateNewUserMode() {
   els.newUserPasswordFields.hidden = !direct;
   els.newUserPassword.required = direct; els.newUserPassword.disabled = !direct;
   els.newUserPasswordConfirmation.required = direct; els.newUserPasswordConfirmation.disabled = !direct;
-  els.newUserSubmitButton.textContent = direct ? "追加" : "招待メールを送信";
+  els.newUserSubmitButton.textContent = direct ? t("message.aec344de806d") : t("message.68bb049d6e5a");
   els.newUserModeHint.textContent = direct
-    ? "メールなしの場合は、管理者が設定した初期パスワードですぐに利用できます。"
-    : "メールへパスワード設定リンクを送信し、設定完了後に利用できます。";
+    ? t("message.aefe82ca3ad5")
+    : t("message.39c2f45faf07");
   if (!direct) els.newUserPasswordConfirmation.setCustomValidity("");
 }
 
-async function userMailAction(action) {
-  const user = state.currentUser; if (!user) return;
-  const label = action === "resend_verification" ? "確認メール" : "パスワード再設定メール";
-  if (!confirm(`${user.userid}へ${label}を送信しますか？`)) return;
+async function userMailAction(action, user) {
+  if (!user) return;
+  const label = action === "resend_verification" ? t("message.b6ca4f615a51") : t("message.b54c9ca70481");
+  if (!user.email || !confirm(t("users.confirm_send_email", { email: user.email, message: label }))) return;
   try {
     const result = await request("admin-users.php", { method: "POST", body: JSON.stringify({ action, id: user.id }) });
     const sent = action === "resend_verification" ? result.verification_email_sent : result.reset_email_sent;
-    setStatus(`${label}を${sent ? "送信しました" : "送信できませんでした"}。`, !sent);
-  } catch (error) { setStatus(`${label}の送信に失敗しました: ${error.message}`, true); }
+    setStatus(`${label}${t("message.eba95ba0c666")}${sent ? t("message.7860024cecc2") : t("message.04da77994baf")}。`, !sent);
+  } catch (error) { setStatus(`${label}${t("message.dab970d4ed88")}${error.message}`, true); }
 }
 
 async function setUserPassword() {
-  const user = state.currentUser; if (!user) return;
+  const user = state.passwordUser; if (!user) return;
   const password = els.editUserPassword.value;
   const confirmation = els.editUserPasswordConfirmation.value;
-  els.editUserPassword.setCustomValidity(password ? "" : "新しいパスワードを入力してください。");
+  els.editUserPassword.setCustomValidity(password ? "" : t("message.f1f150d02c2b"));
   els.editUserPasswordConfirmation.setCustomValidity(!confirmation
-    ? "新しいパスワード（確認）を入力してください。"
-    : (password !== confirmation ? "新しいパスワードが一致しません。" : ""));
+    ? t("message.763fc411bd44")
+    : (password !== confirmation ? t("message.e21670475873") : ""));
   if (!els.editUserPassword.reportValidity() || !els.editUserPasswordConfirmation.reportValidity()) return;
-  els.setUserPasswordButton.disabled = true; els.userPasswordStatus.textContent = "設定中…";
+  els.setUserPasswordButton.disabled = true; els.userPasswordStatus.textContent = t("message.e59f52ab4974");
   try {
     const result = await request("admin-users.php", { method: "POST", body: JSON.stringify({
       action: "set_password", id: user.id, password, password_confirmation: confirmation
     }) });
-    state.currentUser = result.user;
+    state.passwordUser = result.user;
     if (user.id === state.sessionUser?.id) {
       els.userid.value = user.userid; els.password.value = password;
       await request('console-session.php', { method: 'POST', basic: true });
       els.password.value = '';
     }
     els.editUserPassword.value = ""; els.editUserPasswordConfirmation.value = "";
-    els.userPasswordStatus.textContent = "新しいパスワードを設定しました。";
-    setStatus(`${user.userid}のパスワードを再設定しました。`);
+    els.passwordResetDialog.close();
+    setStatus(`${user.userid}${t("message.830552887f67")}`);
   } catch (error) {
-    els.userPasswordStatus.textContent = `設定できません: ${error.message}`;
+    els.userPasswordStatus.textContent = `${t("message.e77c499f3e01")}${error.message}`;
   } finally { els.setUserPasswordButton.disabled = false; }
 }
 
@@ -961,7 +1212,12 @@ function escapeAttribute(value) { return escapeHtml(value).replace(/"/g, "&quot;
 els.loginForm.addEventListener("submit", event => { event.preventDefault(); connect(); });
 els.logoutButton.addEventListener("click", logout);
 document.querySelectorAll("[data-view]").forEach(button => button.addEventListener("click", () => showView(button.dataset.view)));
-els.statusModal.addEventListener("hidden.bs.modal", () => {
+els.mobileViewSelect.addEventListener("change", () => {
+  const view = els.mobileViewSelect.value;
+  showView(view);
+  els.mobileViewSelect.value = ["activities", "users", "trash"].includes(state.view) ? state.view : "projects";
+});
+els.statusModal.addEventListener("close", () => {
   if (statusReturnDialog && !els.adminMain.hidden) statusReturnDialog.showModal();
   statusReturnDialog = null;
 });
@@ -976,6 +1232,10 @@ els.newAppKey.addEventListener("input", () => {
   if (start !== null && end !== null) els.newAppKey.setSelectionRange(start, end);
 });
 els.projectForm.addEventListener("submit", event => { event.preventDefault(); if (event.submitter?.value === "create") createProject(); });
+els.columnsBackButton.addEventListener("click", () => {
+  showView("projects");
+  if (state.view === "projects") { state.schemaDirty = false; updateSchemaDirty(); }
+});
 els.addColumnButton.addEventListener("click", async () => {
   if (!state.columnsTable) return;
   const row = await state.columnsTable.addRow(columnDefinitionRow(), false);
@@ -983,8 +1243,16 @@ els.addColumnButton.addEventListener("click", async () => {
   await row.scrollTo(); row.getCell("field")?.edit();
 });
 els.saveColumnsButton.addEventListener("click", saveColumns);
-els.projectName.addEventListener("input", markSchemaDirty); els.projectEnabled.addEventListener("change", markSchemaDirty);
-els.loadButton.addEventListener("click", () => loadActivities()); els.addButton.addEventListener("click", addActivityRow);
+els.projectName.addEventListener("input", markSchemaDirty); els.projectFrontendUrl.addEventListener("input", markSchemaDirty);
+els.projectFrontendPublic.addEventListener("change", markSchemaDirty);
+els.activitiesBackButton.addEventListener("click", () => {
+  showView("projects");
+  if (state.view === "projects") {
+    state.newActivityRows.clear(); state.deletedActivityRows.clear(); state.dirtyActivityFields.clear();
+    updateDirtyControls();
+  }
+});
+els.addButton.addEventListener("click", addActivityRow);
 els.discardButton.addEventListener("click", () => loadActivities()); els.saveAllButton.addEventListener("click", saveAll);
 els.search.addEventListener("input", applyGlobalActivityFilter);
 els.appSelect.addEventListener("change", () => { if (!confirmDiscard()) { els.appSelect.value = state.currentApp; return; } state.currentApp = els.appSelect.value; state.rows = []; showView("activities", true); });
@@ -999,8 +1267,9 @@ els.newUserEmail.addEventListener("input", updateNewUserMode);
 els.newUserPasswordConfirmation.addEventListener("input", () => els.newUserPasswordConfirmation.setCustomValidity(""));
 els.newUserForm.addEventListener("submit", event => { event.preventDefault(); if (event.submitter?.value === "create") createUser(); });
 els.userForm.addEventListener("submit", event => { event.preventDefault(); if (event.submitter?.value === "save") saveUser(); });
-els.resendVerificationButton.addEventListener("click", () => userMailAction("resend_verification"));
-els.sendPasswordResetButton.addEventListener("click", () => userMailAction("send_password_reset"));
+els.addUserEmailButton.addEventListener("click", addUserEmail);
+els.resendVerificationButton.addEventListener("click", () => userMailAction("resend_verification", state.currentUser));
+els.sendPasswordResetButton.addEventListener("click", () => userMailAction("send_password_reset", state.passwordUser));
 els.setUserPasswordButton.addEventListener("click", setUserPassword);
 els.editUserPassword.addEventListener("input", () => els.editUserPassword.setCustomValidity(""));
 els.editUserPasswordConfirmation.addEventListener("input", () => els.editUserPasswordConfirmation.setCustomValidity(""));

@@ -7,6 +7,7 @@ use DateInterval;
 use DateTimeImmutable;
 use DateTimeZone;
 use RuntimeException;
+use Throwable;
 
 final class AuthService
 {
@@ -60,11 +61,30 @@ final class AuthService
             );
         }
 
+        $this->notifyAdminsOfRegistration($user);
+
         return [
             'status' => $status,
             'verification_required' => $requiresVerification,
             'verification_email_sent' => $sent,
         ];
+    }
+
+    private function notifyAdminsOfRegistration(array $user): void
+    {
+        try {
+            foreach ($this->users->activeAdminEmails() as $recipient) {
+                try {
+                    if (!$this->mailer->sendRegistrationNotice($recipient, $user)) {
+                        error_log('Registration notification could not be sent to an administrator.');
+                    }
+                } catch (Throwable $error) {
+                    error_log('Registration notification failed: ' . $error->getMessage());
+                }
+            }
+        } catch (Throwable $error) {
+            error_log('Registration notification recipient lookup failed: ' . $error->getMessage());
+        }
     }
 
     public function verifyEmail(string $rawToken): void
@@ -73,7 +93,7 @@ final class AuthService
         $this->transactions->run(function () use ($tokenHash): void {
             $token = $this->tokens->consume(self::VERIFY_EMAIL, $tokenHash, $this->now());
             if ($token === null) throw new InvalidTokenException('The verification token is invalid or expired.');
-            $this->users->activate((int)$token['user_id']);
+            $this->users->verifyEmail((int)$token['user_id']);
         });
     }
 
@@ -86,7 +106,8 @@ final class AuthService
         $this->enforceDirectLimit('resend_cooldown', 'identity:' . $rateLimitIdentity, 1, $this->resendCooldown());
         $this->enforceLimit('resend_email', 'identity:' . $rateLimitIdentity);
 
-        if ($user === null || (string)$user['status'] !== 'pending') {
+        if ($user === null || ($user['email'] ?? null) === null || !in_array((string)$user['status'], ['pending', 'active'], true)
+            || $user['email_verified_at'] !== null) {
             return ['accepted' => true, 'verification_email_sent' => true];
         }
 
@@ -106,7 +127,7 @@ final class AuthService
         $this->enforceLimit('reset_email', 'email:' . $emailNormalized);
 
         $user = $this->users->findByIdentity($emailNormalized);
-        if ($user === null || (string)$user['status'] !== 'active') {
+        if ($user === null || (string)$user['status'] !== 'active' || $user['email_verified_at'] === null) {
             return ['accepted' => true, 'reset_email_sent' => true];
         }
 
@@ -181,6 +202,36 @@ final class AuthService
         return ['user_id' => (int)$user['id']];
     }
 
+    public function addEmailForUser(int $userId, array $input, string $clientIdentifier): array
+    {
+        [$email, $emailNormalized] = $this->validateEmail($input['email'] ?? null);
+        $user = $this->users->findById($userId);
+        if ($user === null) throw new ValidationException(['user' => 'User was not found.']);
+        if ($user['email'] !== null) throw new ValidationException(['email' => 'This user already has an email address.']);
+        $this->enforceLimit('resend_client', 'client:' . $clientIdentifier);
+        $this->enforceLimit('resend_email', 'identity:' . $emailNormalized);
+
+        [$updated, $tokenData] = $this->transactions->run(function () use ($userId, $email, $emailNormalized): array {
+            if (!$this->users->addEmailIfMissing($userId, $email, $emailNormalized)) {
+                throw new ValidationException(['email' => 'This user already has an email address.']);
+            }
+            $updated = $this->users->findById($userId);
+            return [$updated, $this->issueToken($userId, self::VERIFY_EMAIL, $this->verificationTtl())];
+        });
+
+        try {
+            $sent = $this->mailer->sendVerification(
+                $updated,
+                $this->tokenUrl('verification_url', $tokenData['token']),
+                $tokenData['expires_at']
+            );
+        } catch (Throwable $error) {
+            error_log('Added-email verification could not be sent: ' . $error->getMessage());
+            $sent = false;
+        }
+        return ['verification_email_sent' => $sent];
+    }
+
     public function setPasswordForUser(int $userId, array $input): void
     {
         if ($this->users->findById($userId) === null) {
@@ -201,8 +252,8 @@ final class AuthService
         if (($user['email_normalized'] ?? null) === null || (string)$user['email_normalized'] === '') {
             throw new ValidationException(['email' => 'This user does not have an email address.']);
         }
-        if ((string)$user['status'] !== 'pending') {
-            throw new ValidationException(['status' => 'Verification can only be resent to pending users.']);
+        if (!in_array((string)$user['status'], ['pending', 'active'], true) || $user['email_verified_at'] !== null) {
+            throw new ValidationException(['status' => 'Verification can only be resent to users with an unverified email.']);
         }
         $this->enforceLimit('resend_client', 'client:' . $clientIdentifier);
         $identity = (string)$user['email_normalized'];
@@ -227,6 +278,9 @@ final class AuthService
         if (!in_array((string)$user['status'], ['active', 'pending'], true)) {
             throw new ValidationException(['status' => 'Password reset cannot be sent to a disabled user.']);
         }
+        if ((string)$user['status'] === 'active' && $user['email_verified_at'] === null) {
+            throw new ValidationException(['email' => 'The email address must be verified before password reset.']);
+        }
         $this->enforceLimit('reset_client', 'client:' . $clientIdentifier);
         $this->enforceLimit('reset_email', 'email:' . (string)$user['email_normalized']);
         $tokenData = $this->transactions->run(fn(): array => $this->issueToken($userId, self::RESET_PASSWORD, $this->passwordResetTtl()));
@@ -243,6 +297,7 @@ final class AuthService
         [, $normalized] = $this->validateIdentity($identity);
         $user = $this->users->findByIdentity($normalized);
         if ($user === null || (string)$user['status'] !== 'active') return null;
+        if ($normalized === (string)($user['email_normalized'] ?? '') && $user['email_verified_at'] === null) return null;
         if (!password_verify($password, (string)$user['password_hash'])) return null;
         $this->users->recordLogin((int)$user['id']);
         return [

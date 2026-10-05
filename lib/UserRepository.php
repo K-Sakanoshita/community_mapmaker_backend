@@ -64,6 +64,49 @@ final class UserRepository implements UserRepositoryInterface
         return $user === false ? null : $user;
     }
 
+    public function activeAdminEmails(): array
+    {
+        $statement = $this->pdo->query(
+            "SELECT DISTINCT email FROM users WHERE role = 'admin' AND status = 'active' AND email_verified_at IS NOT NULL AND email IS NOT NULL AND email <> ''"
+        );
+        return array_values(array_filter(
+            $statement->fetchAll(PDO::FETCH_COLUMN),
+            static fn(mixed $email): bool => is_string($email) && filter_var($email, FILTER_VALIDATE_EMAIL) !== false
+        ));
+    }
+
+    public function addEmailIfMissing(int $id, string $email, string $emailNormalized): bool
+    {
+        $statement = $this->pdo->prepare(
+            'UPDATE users SET email = :email, email_normalized = :email_normalized, email_verified_at = NULL, updated_at = :updated_at '
+            . 'WHERE id = :id AND email IS NULL'
+        );
+        try {
+            $statement->execute([
+                ':email' => $email,
+                ':email_normalized' => $emailNormalized,
+                ':updated_at' => gmdate('Y-m-d H:i:s'),
+                ':id' => $id,
+            ]);
+        } catch (PDOException $error) {
+            if ((string)$error->getCode() === '23000') {
+                throw new DuplicateIdentityException('Email is already registered.', 0, $error);
+            }
+            throw $error;
+        }
+        return $statement->rowCount() === 1;
+    }
+
+    public function verifyEmail(int $id): void
+    {
+        $now = gmdate('Y-m-d H:i:s');
+        $statement = $this->pdo->prepare(
+            "UPDATE users SET status = CASE WHEN status = 'pending' THEN 'active' ELSE status END, "
+            . 'email_verified_at = :verified_at, updated_at = :updated_at WHERE id = :id AND email IS NOT NULL'
+        );
+        $statement->execute([':verified_at' => $now, ':updated_at' => $now, ':id' => $id]);
+    }
+
     public function activate(int $id): void
     {
         $statement = $this->pdo->prepare(

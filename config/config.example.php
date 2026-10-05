@@ -16,7 +16,7 @@ return [
         'resend_cooldown_seconds' => 60,
         'password_min_length' => 8,
         'allow_insecure_local_urls' => false,
-        'verification_url' => 'https://api.example.jp/auth/verify.php',
+        'verification_url' => 'https://api.example.jp/verify-email.html',
         'password_reset_url' => 'https://api.example.jp/reset-password.html',
         'rate_limit_secret' => getenv('CMM_RATE_LIMIT_SECRET') ?: '',
         'allowed_origins' => [

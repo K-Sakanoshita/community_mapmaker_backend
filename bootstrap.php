@@ -84,6 +84,7 @@ try {
         'auth_config' => $authConfig,
         'admin_users' => $adminUsers,
         'project_access' => $projectAccess,
+        'database' => $database,
         'audit_logs' => $auditLogs,
         'activity' => $activityService,
         'activity_schema' => $activitySchema,

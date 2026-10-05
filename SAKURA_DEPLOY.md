@@ -7,6 +7,8 @@
 ```text
 /home/ACCOUNT/
 ├── community_mapmaker_backend/          # Git clone。Web 非公開
+│   ├── index.html, portal.css, portal.js
+│   ├── register.html, verify-email.html
 │   ├── admin/
 │   ├── api/
 │   ├── auth/
@@ -93,7 +95,7 @@ chmod +x scripts/deploy-sakura.sh
 
 ## deploy-sakura.sh が行うこと
 
-- `admin/`、`api/`、`auth/` を公開側へコピー
+- `index.html`、`portal.css`、`portal.js`、`register.html`、`verify-email.html`、`admin/`、`api/`、`auth/` を公開側へコピー
 - `reset-password.html` を公開側へコピー
 - PHP 実行に必要な `bootstrap.php` と `lib/` を公開側へコピー
 - `config/config.php` の実体は Git 作業ツリー側に残す
@@ -103,6 +105,8 @@ chmod +x scripts/deploy-sakura.sh
 - さくらの設置条件に合わせ、公開側の PHP ファイルを 755、その他の通常ファイルを 644、ディレクトリを 755 に設定
 
 PHP からの `require` は `.htaccess` の HTTP アクセス制限の影響を受けないため、API 自体は従来の相対パスのまま動作します。
+
+ポータルのOGP画像・説明文プレビューにはPHPの`curl`拡張が必要です。利用できない環境ではProjectカードの代替画像を表示し、地図へのリンクは引き続き利用できます。
 
 ## DB の作成
 
@@ -136,7 +140,9 @@ git pull
 配置後、まず読み取り系 API と管理画面を確認します。
 
 ```text
+https://YOUR_HOST/community-mapmaker-backend/
 https://YOUR_HOST/community-mapmaker-backend/admin/
+https://YOUR_HOST/community-mapmaker-backend/en/admin/
 https://YOUR_HOST/community-mapmaker-backend/api/activities.php?app=playgrounds
 https://YOUR_HOST/community-mapmaker-backend/reset-password.html
 ```

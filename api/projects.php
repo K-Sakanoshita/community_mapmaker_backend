@@ -2,36 +2,41 @@
 declare(strict_types=1);
 
 use CommunityMapMaker\Activity\ActivityApi;
-use CommunityMapMaker\Auth\AdminApi;
+use CommunityMapMaker\Activity\ProjectNotFoundException;
 use CommunityMapMaker\Auth\Http;
 
 $container = require dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/lib/ActivityApi.php';
-require_once dirname(__DIR__) . '/lib/AdminApi.php';
 
 $method = Http::requireMethods(['GET', 'POST', 'PUT', 'DELETE']);
 
-if ($method === 'GET') {
-    ActivityApi::run(function () use ($container): array {
-        AdminApi::requireAdmin($container);
-        $appKey = isset($_GET['app']) ? trim((string)$_GET['app']) : '';
-        if ($appKey !== '') {
-            $project = $container['project_service']->find($appKey);
-            return [200, $project];
-        }
-        $projects = $container['project_service']->list();
-        return [200, $projects];
-    });
-}
-
 ActivityApi::run(function () use ($container, $method): array {
-    AdminApi::requireAdmin($container);
+    $user = ActivityApi::requireAuthentication($container);
+    $isAdmin = ($user['role'] ?? 'user') === 'admin';
+
+    if ($method === 'GET') {
+        $projects = $container['project_repo']->withActivityCounts($container['project_access']->visibleProjects(
+            $user,
+            $container['project_service']->list()
+        ));
+        $appKey = isset($_GET['app']) ? trim((string)$_GET['app']) : '';
+        if ($appKey === '') return [200, $projects];
+        foreach ($projects as $project) {
+            if ($project['app_key'] === $appKey) return [200, $project];
+        }
+        throw new ProjectNotFoundException('Project not found.');
+    }
+
     $maxBytes = max(1024, (int)($container['activity_config']['max_payload_bytes'] ?? 262144));
     $input = $method === 'DELETE' ? [] : Http::jsonInput($maxBytes);
 
     if ($method === 'POST') {
-        $created = $container['project_service']->create($input);
-        return [201, $created];
+        $created = $container['database']->run(function () use ($container, $input, $user, $isAdmin): array {
+            $project = $container['project_service']->create($input, (int)$user['id']);
+            if (!$isAdmin) $container['project_access']->assignCreatedProject($user, $project);
+            return $project;
+        });
+        return [201, $created + ['access_role' => $isAdmin ? 'admin' : 'project_admin', 'activity_count' => 0]];
     }
 
     $appKey = isset($_GET['app']) ? trim((string)$_GET['app']) : trim((string)($input['app_key'] ?? ''));
@@ -40,10 +45,14 @@ ActivityApi::run(function () use ($container, $method): array {
     }
 
     if ($method === 'PUT') {
+        $container['project_access']->assertCanManage($user, $appKey);
         $updated = $container['project_service']->update($appKey, $input);
-        return [200, $updated];
+        $updated = $container['project_repo']->withActivityCounts([$updated])[0];
+        return [200, $updated + ['access_role' => $isAdmin ? 'admin' : 'project_admin']];
     }
 
+    $container['project_access']->assertCanManage($user, $appKey);
+    $container['project_access']->assertCanDelete($user, $container['project_service']->find($appKey));
     $container['project_service']->delete($appKey);
     return [200, ['status' => 'ok']];
 });

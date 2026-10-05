@@ -63,12 +63,14 @@ esac
 
 mkdir -p "$PUBLIC_DIR"
 
-for dir in api auth admin lib; do
+for dir in api auth admin en lib; do
     rm -rf "$PUBLIC_DIR/$dir"
     cp -R "$REPO_ROOT/$dir" "$PUBLIC_DIR/$dir"
 done
 cp "$REPO_ROOT/bootstrap.php" "$PUBLIC_DIR/bootstrap.php"
-cp "$REPO_ROOT/reset-password.html" "$PUBLIC_DIR/reset-password.html"
+for file in index.html portal.css portal.js portal-hero.jpg register.html verify-email.html reset-password.html; do
+    cp "$REPO_ROOT/$file" "$PUBLIC_DIR/$file"
+done
 
 rm -rf "$PUBLIC_DIR/config"
 mkdir -p "$PUBLIC_DIR/config"
@@ -106,5 +108,5 @@ find "$PUBLIC_DIR" -type f -name '*.php' -exec chmod 755 {} \;
 
 echo "Deployed to: $PUBLIC_DIR"
 echo "Private config: $CONFIG_FILE"
-echo "Public endpoints: admin/ api/ auth/ reset-password.html"
+echo "Public endpoints: index.html admin/ api/ auth/ register.html verify-email.html reset-password.html"
 echo "bootstrap.php, lib/, and config/ are blocked from direct HTTP access."

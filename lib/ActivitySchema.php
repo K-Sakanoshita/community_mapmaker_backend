@@ -25,11 +25,12 @@ final class ActivitySchema
             }
         }
         $keys = [];
+        $deletedKeys = $this->projectRepo === null ? [] : array_fill_keys($this->projectRepo->deletedKeys(), true);
         foreach (array_keys($this->apps) as $key) {
-            if (is_string($key) && (!isset($projects[$key]) || $projects[$key]['enabled'])) $keys[] = $key;
+            if (is_string($key) && !isset($deletedKeys[$key])) $keys[] = $key;
         }
         foreach ($projects as $project) {
-            if ($project['enabled'] && !in_array($project['app_key'], $keys, true)) $keys[] = $project['app_key'];
+            if (!in_array($project['app_key'], $keys, true)) $keys[] = $project['app_key'];
         }
         return $keys;
     }
@@ -40,7 +41,7 @@ final class ActivitySchema
         if ($this->projectRepo !== null) {
             $project = $this->projectRepo->find($appKey);
             if ($project !== null) {
-                if (!$project['enabled']) throw new UnknownAppException('Unknown app.');
+                if ($project['is_deleted']) throw new UnknownAppException('Unknown app.');
                 $static = is_array($this->apps[$appKey] ?? null) ? $this->apps[$appKey] : [];
                 return [
                     'id_prefix' => (string)($static['id_prefix'] ?? $appKey),
@@ -59,6 +60,8 @@ final class ActivitySchema
 
     public function get(string $appKey): array
     {
+        // Recheck visibility before returning a schema cached earlier in this request.
+        if ($this->projectRepo?->find($appKey)['is_deleted'] ?? false) throw new UnknownAppException('Unknown app.');
         if (isset($this->loaded[$appKey])) return $this->loaded[$appKey];
 
         $config = $this->appConfig($appKey);

@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <base href="../../admin/">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Project Management | Community Map Maker</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/tabulator-tables@6.5.2/dist/css/tabulator.min.css" integrity="sha384-7L13yWDATAJeK/mNTrYjb3Z8l08N1iGKbO9mSeSdlqR91llnpd0c4Y8wPznKlHCh" crossorigin="anonymous">
+  <link rel="stylesheet" href="admin.css?v=20261003-activity-close">
+</head>
+<body>
+  <div id="sessionLoading" class="login-screen session-loading" role="status" aria-live="polite">Checking your sign-in status...</div>
+  <section id="loginScreen" class="login-screen" aria-labelledby="loginTitle" hidden>
+    <form id="loginForm" class="login-card card shadow p-4">
+      <div class="login-brand">
+        <p class="eyebrow">Community Map Maker</p>
+        <h1 id="loginTitle">Project Management</h1>
+        <p>Sign in with your account.</p>
+      </div>
+      <div class="login-fields">
+        <label>User ID<input class="form-control" id="userid" autocomplete="username" autofocus required></label>
+        <label>Password<input class="form-control" id="password" type="password" autocomplete="current-password" required></label>
+        <button id="connectButton" class="btn btn-success" type="submit">Sign in</button>
+      </div>
+      <p class="signup-link"><a href="../">Back to portal</a> · <a href="../register.html">Create an account</a></p>
+      <p id="loginStatus" class="login-status text-center small" role="status" aria-live="polite">Enter your credentials.</p>
+    </form>
+  </section>
+
+  <header id="adminHeader" hidden>
+    <div>
+      <p class="eyebrow">Community Map Maker</p>
+      <h1>Project Management</h1>
+    </div>
+    <div class="header-right">
+      <nav class="nav nav-pills gap-1" aria-label="Administration">
+        <button class="tab-btn btn btn-outline-light active" type="button" data-view="projects">Project Management</button>
+        <button class="tab-btn btn btn-outline-light" type="button" data-view="activities" disabled>Activity Data</button>
+        <button class="tab-btn btn btn-outline-light" type="button" data-view="users" disabled>User Management</button>
+        <button class="tab-btn btn btn-outline-light" type="button" data-view="trash" hidden disabled>Deleted Data</button>
+      </nav>
+      <div class="mobile-nav-label">
+        <select class="form-select" id="mobileViewSelect" aria-label="Administration menu">
+          <option value="projects">Project Management</option>
+          <option value="activities" disabled>Activity Data</option>
+          <option value="users" hidden disabled>User Management</option>
+          <option value="trash" hidden>Deleted Data</option>
+        </select>
+      </div>
+      <div class="session-actions">
+        <span id="currentAdmin" class="session-user"></span>
+        <button class="btn btn-outline-secondary" id="logoutButton" type="button" aria-label="Sign out" title="Sign out"><span class="logout-text">Sign out</span><svg class="logout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7"/></svg></button>
+      </div>
+    </div>
+  </header>
+
+  <main id="adminMain" hidden>
+
+    <section id="projectsView" class="view">
+      <div class="section-header d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+        <div><h2>Projects</h2><p class="section-desc">Manage the display name separately from the fixed app_key.</p></div>
+        <button class="btn btn-success" id="newProjectButton" type="button" disabled>Create project</button>
+      </div>
+      <div id="projectsGrid" class="projects-grid empty-state">Sign in to view projects.</div>
+    </section>
+
+    <section id="trashView" class="view" hidden>
+      <div class="section-header mb-3">
+        <h2>Deleted Data</h2>
+        <p class="section-desc">Restoring makes project settings, activity data, and user assignments available again. Permanent deletion removes related data.</p>
+      </div>
+      <p id="trashStatus" role="status" aria-live="polite"></p>
+      <div class="table-responsive">
+        <table class="table table-striped table-hover table-bordered align-middle trash-table">
+          <thead><tr><th>Project</th><th>app_key</th><th>Deleted at (UTC)</th><th>Activity data</th><th>User assignments</th><th>Actions</th></tr></thead>
+          <tbody id="trashProjectsBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="columnsView" class="view" hidden>
+      <div class="section-header detail-view-header d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+        <div><h2>Project Settings and Columns</h2></div>
+        <div class="d-flex flex-wrap gap-2">
+          <button class="btn btn-outline-secondary" id="addColumnButton" type="button">Add column</button>
+          <button class="btn btn-success" id="saveColumnsButton" type="button" disabled>Save settings</button>
+        </div>
+        <button class="dialog-close detail-back-button" id="columnsBackButton" type="button" aria-label="Back to projects" title="Back to projects">✕</button>
+      </div>
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-3 p-3 border rounded bg-white">
+        <div class="project-name-field"><div class="project-name-heading"><label for="projectName">Project name</label><span class="badge text-bg-light border font-monospace project-key-badge">KEY: <span id="columnsProjectKey"></span></span></div><input class="form-control" id="projectName" maxlength="255"></div>
+        <label class="project-url-field">Frontend URL<input class="form-control" id="projectFrontendUrl" type="url" maxlength="2048" placeholder="https://example.jp/map/"></label>
+        <label class="check-label"><input class="form-check-input" id="projectFrontendPublic" type="checkbox"> Show in portal</label>
+      </div>
+      <p class="section-desc">Drag the handle at the left to reorder columns. Removing a column definition does not delete existing activity data.</p>
+      <div id="columnsTable" class="columns-table-wrap" aria-label="Column definition table"></div>
+    </section>
+
+    <section id="activitiesView" class="view" hidden>
+      <div class="section-header detail-view-header mb-3">
+        <div><h2>Activity data</h2><p class="activity-required-note"><span aria-hidden="true">*</span>  marks required fields (OSM ID and required project columns). A blank activity ID is generated automatically.</p></div>
+        <button class="dialog-close detail-back-button" id="activitiesBackButton" type="button" aria-label="Back to projects" title="Back to projects">✕</button>
+      </div>
+      <div class="toolbar d-flex flex-wrap align-items-end gap-2 mb-3" aria-label="Activity data actions">
+        <div class="activity-project-block">
+          <div class="activity-project-controls">
+            <label>Project<select class="form-select" id="appSelect"></select></label>
+            <a id="activitiesFrontendLink" class="btn btn-outline-success activity-frontend-link" target="_blank" rel="noopener noreferrer" aria-label="Open the selected project map" title="View map" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg></a>
+          </div>
+        </div>
+        <label class="search">Search all columns<input class="form-control" id="search" type="search" placeholder="Search all visible columns"></label>
+        <button class="btn btn-outline-secondary activity-icon-button" id="addButton" type="button" aria-label="Add row" title="Add row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+        <div class="activity-save-actions">
+          <button class="btn btn-outline-danger activity-icon-button" id="discardButton" type="button" aria-label="Discard changes" title="Discard changes" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M5 6l1 14h12l1-14M10 10v7M14 10v7"/></svg></button>
+          <button class="btn btn-success activity-icon-button" id="saveAllButton" type="button" aria-label="Save all changes" title="Save all changes" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3h14l3 3v15H3V3h1Z"/><path d="M7 3v7h10V3M7 21v-8h10v8M14 3v5"/></svg><span id="dirtyCount" aria-hidden="true"></span></button>
+        </div>
+        <details class="activity-file-menu">
+          <summary class="btn btn-outline-secondary activity-icon-button" aria-label="Import and export" title="Import and export"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 10V3m0 0L5 6m3-3 3 3M16 14v7m0 0-3-3m3 3 3-3M4 12h16"/></svg></summary>
+          <div class="activity-file-menu-items">
+            <label class="btn btn-outline-secondary import">Import file<input class="form-control" id="importFile" type="file" accept="application/json,text/csv,.json,.csv"></label>
+            <a id="jsonExport" class="btn btn-outline-secondary" download>Export JSON</a>
+            <a id="csvExport" class="btn btn-outline-secondary" download>Export CSV</a>
+          </div>
+        </details>
+      </div>
+      <div id="activityTable" class="spreadsheet-wrap" aria-label="Activity data table"></div>
+    </section>
+
+    <section id="usersView" class="view" hidden>
+      <div class="section-header d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+        <div><h2>User Management</h2><p class="section-desc">Manage account status, roles, email verification, and activity.</p></div>
+      </div>
+      <div class="toolbar d-flex flex-wrap align-items-end gap-2 mb-3" aria-label="User search">
+        <label class="search">User ID or email<input class="form-control" id="usersSearch" type="search" placeholder="Search"></label>
+        <label>Status<select class="form-select" id="userStatusFilter"><option value="">All</option><option value="pending">pending</option><option value="active">active</option><option value="disabled">disabled</option></select></label>
+        <label>Email verification<select class="form-select" id="userVerifiedFilter"><option value="">All</option><option value="yes">Verified</option><option value="no">Unverified</option></select></label>
+        <label>Role<select class="form-select" id="userRoleFilter"><option value="">All</option><option value="user">user</option><option value="admin">admin</option></select></label>
+        <label>Project<select class="form-select" id="userProjectFilter"><option value="">All</option></select></label>
+        <button class="btn btn-outline-secondary" id="usersLoadButton" type="button">Search</button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-striped table-hover table-bordered align-middle users-table">
+          <thead><tr><th>User ID and status</th><th>Email</th><th>Role</th><th>Email verification</th><th>Last sign-in</th><th>Owned projects</th><th>Assigned projects</th><th>Actions</th></tr></thead>
+          <tbody id="usersBody"></tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-end align-items-center gap-2 mt-3"><button class="btn btn-outline-secondary" id="usersPrevButton" type="button">Previous</button><span id="usersPageInfo"></span><button class="btn btn-outline-secondary" id="usersNextButton" type="button">Next</button></div>
+      <button class="btn btn-success user-add-fab" id="newUserButton" type="button" aria-label="Add user" title="Add user" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+    </section>
+  </main>
+
+  <dialog id="projectDialog" class="app-dialog">
+    <form id="projectForm" method="dialog">
+      <h2>Create project</h2>
+      <label class="form-group mb-3">Project name <span class="text-danger">Required</span><input class="form-control" id="newProjectName" maxlength="255" required></label>
+      <label class="form-group mb-3">app_key <span class="text-danger">Required</span><input class="form-control" id="newAppKey" pattern="[a-z0-9][a-z0-9_\-]{0,63}" maxlength="64" autocapitalize="none" autocomplete="off" spellcheck="false" required><span class="hint form-text">Uppercase letters are converted to lowercase. Use lowercase letters, digits, _ or -. This cannot be changed after creation.</span></label>
+      <label class="form-group mb-3">Frontend URL<input class="form-control" id="newProjectFrontendUrl" type="url" maxlength="2048" placeholder="https://example.jp/map/"><span class="hint form-text">No map link is shown when this is empty.</span></label>
+      <label class="check-label"><input class="form-check-input" id="newProjectFrontendPublic" type="checkbox"> Show in portal</label>
+      <div class="d-flex justify-content-end gap-2 mt-3"><button class="btn btn-outline-secondary" type="button" data-close-dialog="projectDialog">Cancel</button><button class="btn btn-success" value="create">Create</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="csvDialog" class="app-dialog">
+    <form id="csvForm" method="dialog">
+      <h2>Confirm CSV import</h2>
+      <p id="csvSummary"></p>
+      <div id="csvMissing"></div>
+      <label id="addMissingLabel" class="check-label"><input class="form-check-input" id="addMissingColumns" type="checkbox" checked> Add new columns, types, and options to the schema</label>
+      <p class="hint form-text">A dry run has completed. Import adds or updates records by activity ID.</p>
+      <div class="d-flex justify-content-end gap-2 mt-3"><button class="btn btn-outline-secondary" type="button" data-close-dialog="csvDialog">Cancel</button><button class="btn btn-success" value="import">Run import</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="newUserDialog" class="app-dialog">
+    <form id="newUserForm" method="dialog">
+      <div class="dialog-heading"><h2>Add user</h2><button class="dialog-close" type="button" data-close-dialog="newUserDialog" aria-label="Cancel" title="Cancel">✕</button></div>
+      <p id="newUserModeHint" class="hint form-text">Without an email address, the account can be used immediately with the initial password set by an administrator.</p>
+      <label class="form-group mb-3">User ID <span class="text-danger">Required</span><input class="form-control" id="newUserId" minlength="3" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,63}" required></label>
+      <label class="form-group mb-3">Email (optional)<input class="form-control" id="newUserEmail" type="email" maxlength="255"><span class="hint form-text">With an email address, a password setup email is sent instead of setting an initial password.</span></label>
+      <div id="newUserPasswordFields" class="password-fields">
+        <label class="form-group mb-3">Initial password <span class="text-danger">Required, at least 8 characters</span><input class="form-control" id="newUserPassword" type="password" minlength="8" maxlength="4096" autocomplete="new-password"></label>
+        <label class="form-group mb-3">Confirm initial password <span class="text-danger">Required</span><input class="form-control" id="newUserPasswordConfirmation" type="password" minlength="8" maxlength="4096" autocomplete="new-password"></label>
+      </div>
+      <label class="form-group mb-3">Role<select class="form-select" id="newUserRole"><option value="user">user</option><option value="admin">admin</option></select></label>
+      <fieldset><legend>Assigned projects</legend><div id="newUserProjects" class="project-assignments"></div></fieldset>
+      <div class="d-flex justify-content-end gap-2 mt-3"><button class="btn btn-outline-secondary" type="button" data-close-dialog="newUserDialog">Cancel</button><button class="btn btn-success" id="newUserSubmitButton" value="create">Add</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="userDialog" class="app-dialog user-modal">
+    <form id="userForm" method="dialog">
+      <div class="dialog-heading"><h2 id="userDialogTitle">User details</h2><button class="dialog-close" type="button" data-close-dialog="userDialog" aria-label="Close" title="Close">✕</button></div>
+      <dl id="userMetadata" class="detail-grid"></dl>
+      <div class="user-edit-grid">
+        <label class="form-group mb-3">Status<select class="form-select" id="editUserStatus"><option value="pending">pending</option><option value="active">active</option><option value="disabled">disabled</option></select></label>
+        <label class="form-group mb-3">Role<select class="form-select" id="editUserRole"><option value="user">user</option><option value="admin">admin</option></select></label>
+      </div>
+      <section class="user-detail-section"><h3>Assigned projects</h3><div id="editUserProjects" class="project-assignments"></div></section>
+      <section id="userAddEmailSection" class="user-detail-section" hidden>
+        <label class="user-email-field">Email address<input class="form-control" id="addUserEmail" type="email" maxlength="255" autocomplete="email" required></label>
+        <button class="btn btn-outline-success mt-3" id="addUserEmailButton" type="button">Save and send verification email</button>
+      </section>
+      <section id="userMailActions" class="user-detail-section" hidden>
+        <h3>Email actions</h3>
+        <p class="user-section-description">To:<strong id="userMailAddress"></strong>(registered email address)</p>
+        <p id="userMailDescription" class="user-section-description"></p>
+        <div class="user-actions">
+          <button class="btn btn-outline-secondary" id="resendVerificationButton" type="button">Resend verification email</button>
+        </div>
+      </section>
+      <p id="userEmailStatus" class="user-email-status" role="status" aria-live="polite"></p>
+      <div class="user-dialog-footer d-flex justify-content-end gap-2"><button class="btn btn-success" value="save" formnovalidate>Save changes</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="passwordResetDialog" class="app-dialog user-modal" aria-labelledby="passwordResetTitle">
+    <div class="dialog-heading"><h2 id="passwordResetTitle">Reset Password</h2><button class="dialog-close" type="button" data-close-dialog="passwordResetDialog" aria-label="Close" title="Close">✕</button></div>
+    <section id="passwordResetEmailSection" class="password-reset-section" hidden>
+      <h3>Reset by email</h3>
+      <p class="user-section-description">To:<strong id="passwordResetEmailAddress"></strong></p>
+      <button class="btn btn-outline-secondary" id="sendPasswordResetButton" type="button">Send password reset email</button>
+    </section>
+    <section class="password-reset-section">
+      <h3>Administrator sets password</h3>
+      <p class="user-section-description">Set a new password directly, including for users without an email address.</p>
+      <div class="password-reset-grid">
+        <label class="form-group mb-3">New password <span class="hint form-text">At least 8 characters</span><input class="form-control" id="editUserPassword" type="password" minlength="8" maxlength="4096" autocomplete="new-password"></label>
+        <label class="form-group mb-3">Confirm new password<input class="form-control" id="editUserPasswordConfirmation" type="password" minlength="8" maxlength="4096" autocomplete="new-password"></label>
+      </div>
+      <div class="password-reset-actions"><p id="userPasswordStatus" class="hint form-text" role="status" aria-live="polite"></p><button class="btn btn-success" id="setUserPasswordButton" type="button">Set new password</button></div>
+    </section>
+  </dialog>
+
+  <dialog id="statusModal" class="app-dialog status-dialog" aria-labelledby="statusModalTitle" aria-describedby="status">
+    <div class="dialog-heading"><h2 id="statusModalTitle">Notice</h2><button class="dialog-close" type="button" data-close-dialog="statusModal" aria-label="Close" title="Close">✕</button></div>
+    <p id="status" role="status" aria-live="polite"></p>
+    <div class="status-dialog-footer"><button class="btn btn-secondary" type="button" data-close-dialog="statusModal">Close</button></div>
+  </dialog>
+  <script src="https://unpkg.com/tabulator-tables@6.5.2/dist/js/tabulator.min.js" integrity="sha384-ZlfxHB5fIn8MOAuKJe8YBMi7snQXYvhy+0b3K4rGBBY2UvrJwho2jciJ5NKt0WtC" crossorigin="anonymous" defer></script>
+  <script src="i18n.js?v=20261003-activity-count" defer></script>
+  <script src="admin.js?v=20261003-activity-count" defer></script>
+</body>
+</html>

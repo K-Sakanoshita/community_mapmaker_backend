@@ -8,6 +8,10 @@ interface UserRepositoryInterface
     public function create(string $userid, string $useridNormalized, ?string $email, ?string $emailNormalized, string $passwordHash, string $status, string $role = 'user'): array;
     public function findById(int $id): ?array;
     public function findByIdentity(string $identityNormalized): ?array;
+    /** @return list<string> */
+    public function activeAdminEmails(): array;
+    public function addEmailIfMissing(int $id, string $email, string $emailNormalized): bool;
+    public function verifyEmail(int $id): void;
     public function activate(int $id): void;
     public function updatePassword(int $id, string $passwordHash): void;
     public function recordLogin(int $id): void;
@@ -27,6 +31,7 @@ interface ProjectAccessRepositoryInterface
 {
     public function rolesForUser(int $userId): array;
     public function roleForUser(int $userId, string $appKey): ?string;
+    public function assignProject(int $userId, int $projectId, string $role): void;
 }
 
 interface AuditLogRepositoryInterface
@@ -56,6 +61,7 @@ interface Mailer
 {
     public function sendVerification(array $user, string $verificationUrl, \DateTimeImmutable $expiresAt): bool;
     public function sendPasswordReset(array $user, string $resetUrl, \DateTimeImmutable $expiresAt): bool;
+    public function sendRegistrationNotice(string $recipient, array $user): bool;
 }
 
 namespace CommunityMapMaker\Activity;
@@ -81,8 +87,10 @@ interface ActivityRepositoryInterface
 interface ProjectRepositoryInterface
 {
     public function list(bool $onlyEnabled = false): array;
+    /** @return list<string> */
+    public function deletedKeys(): array;
     public function find(string $appKey): ?array;
-    public function create(string $appKey, string $projectName, array $schema, bool $enabled = true): array;
-    public function update(string $appKey, ?string $projectName, ?array $schema, ?bool $enabled = null): ?array;
+    public function create(string $appKey, string $projectName, array $schema, bool $enabled = true, ?string $frontendUrl = null, bool $frontendPublic = false, ?int $createdByUserId = null): array;
+    public function update(string $appKey, ?string $projectName, ?array $schema, ?bool $enabled = null, ?string $frontendUrl = null, ?bool $frontendPublic = null): ?array;
     public function delete(string $appKey): bool;
 }

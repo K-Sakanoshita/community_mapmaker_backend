@@ -29,6 +29,29 @@ final class ProjectAccessService
         return $visible;
     }
 
+    public function assignCreatedProject(array $user, array $project): void
+    {
+        $this->projects->assignProject((int)$user['id'], (int)$project['id'], 'project_admin');
+    }
+
+    public function assertCanManage(array $user, string $appKey): void
+    {
+        if (($user['role'] ?? 'user') === 'admin') return;
+        if ($this->projects->roleForUser((int)$user['id'], $appKey) !== 'project_admin') {
+            throw new ProjectAccessDeniedException('Project administration is not permitted.');
+        }
+    }
+
+    public function assertCanDelete(array $user, array $project): void
+    {
+        if (($user['role'] ?? 'user') === 'admin') return;
+        $appKey = (string)($project['app_key'] ?? '');
+        $this->assertCanManage($user, $appKey);
+        if (($project['created_by_user_id'] ?? null) !== (int)$user['id']) {
+            throw new ProjectAccessDeniedException('Only the project creator may delete this project.');
+        }
+    }
+
     public function assertCanWrite(array $user, string $appKey): void
     {
         if (($user['role'] ?? 'user') === 'admin') return;

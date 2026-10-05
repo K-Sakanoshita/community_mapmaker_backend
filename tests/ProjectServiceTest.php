@@ -15,22 +15,25 @@ require_once dirname(__DIR__) . '/lib/ProjectService.php';
 final class MemoryProjects implements ProjectRepositoryInterface
 {
     public array $rows = [];
-    public function list(bool $onlyEnabled = false): array { return array_values(array_filter($this->rows, fn(array $row): bool => !$onlyEnabled || $row['enabled'])); }
+    public function list(bool $onlyEnabled = false): array { return array_values(array_filter($this->rows, fn(array $row): bool => !$row['is_deleted'] && (!$onlyEnabled || $row['enabled']))); }
+    public function deletedKeys(): array { return array_keys(array_filter($this->rows, fn(array $row): bool => $row['is_deleted'])); }
     public function find(string $appKey): ?array { return $this->rows[$appKey] ?? null; }
-    public function create(string $appKey, string $projectName, array $schema, bool $enabled = true): array
+    public function create(string $appKey, string $projectName, array $schema, bool $enabled = true, ?string $frontendUrl = null, bool $frontendPublic = false, ?int $createdByUserId = null): array
     {
         if (isset($this->rows[$appKey])) throw new DuplicateProjectException();
-        return $this->rows[$appKey] = ['id' => count($this->rows) + 1, 'app_key' => $appKey, 'project_name' => $projectName, 'schema' => $schema, 'enabled' => $enabled, 'created_at' => 'now', 'updated_at' => 'now'];
+        return $this->rows[$appKey] = ['id' => count($this->rows) + 1, 'app_key' => $appKey, 'project_name' => $projectName, 'frontend_url' => $frontendUrl, 'frontend_public' => $frontendPublic, 'schema' => $schema, 'enabled' => $enabled, 'is_deleted' => false, 'created_by_user_id' => $createdByUserId, 'created_at' => 'now', 'updated_at' => 'now'];
     }
-    public function update(string $appKey, ?string $projectName, ?array $schema, ?bool $enabled = null): ?array
+    public function update(string $appKey, ?string $projectName, ?array $schema, ?bool $enabled = null, ?string $frontendUrl = null, ?bool $frontendPublic = null): ?array
     {
-        if (!isset($this->rows[$appKey])) return null;
+        if (!isset($this->rows[$appKey]) || $this->rows[$appKey]['is_deleted']) return null;
         if ($projectName !== null) $this->rows[$appKey]['project_name'] = $projectName;
         if ($schema !== null) $this->rows[$appKey]['schema'] = $schema;
+        if ($frontendUrl !== null) $this->rows[$appKey]['frontend_url'] = $frontendUrl === '' ? null : $frontendUrl;
+        if ($frontendPublic !== null) $this->rows[$appKey]['frontend_public'] = $frontendPublic;
         if ($enabled !== null) $this->rows[$appKey]['enabled'] = $enabled;
         return $this->rows[$appKey];
     }
-    public function delete(string $appKey): bool { if (!isset($this->rows[$appKey])) return false; unset($this->rows[$appKey]); return true; }
+    public function delete(string $appKey): bool { if (!isset($this->rows[$appKey]) || $this->rows[$appKey]['is_deleted']) return false; $this->rows[$appKey]['is_deleted'] = true; return true; }
 }
 
 function projectAssert(bool $condition, string $message): void { if (!$condition) throw new RuntimeException($message); }
@@ -43,16 +46,28 @@ function projectThrows(callable $callback, string $class, string $message): void
 $repo = new MemoryProjects();
 $schema = new ActivitySchema([], $repo);
 $service = new ProjectService($repo, $schema);
-$created = $service->create(['app_key' => 'town-map', 'project_name' => 'まち歩き']);
+$created = $service->create(['app_key' => 'town-map', 'project_name' => 'まち歩き'], 11);
 projectAssert($created['app_key'] === 'town-map' && $created['project_name'] === 'まち歩き', 'Project name and immutable app key must be stored separately.');
+projectAssert($created['created_by_user_id'] === 11, 'Project creator must be recorded on creation.');
 projectAssert(array_column(array_values($created['schema']['fields']), 'order') === [0, 1, 2], 'Default schema must have deterministic column order.');
 projectThrows(fn() => $service->create(['app_key' => 'town-map', 'project_name' => 'duplicate']), DuplicateProjectException::class, 'App key must be unique.');
+projectThrows(fn() => $service->create(['app_key' => 'bad-url', 'project_name' => 'Bad', 'frontend_url' => 'javascript:alert(1)']), ActivityValidationException::class, 'Unsafe frontend URLs must be rejected.');
+projectThrows(fn() => $service->create(['app_key' => 'no-url', 'project_name' => 'No URL', 'frontend_public' => true]), ActivityValidationException::class, 'Public frontend requires a URL.');
+$withFrontend = $service->update('town-map', ['frontend_url' => 'https://example.jp/map/#14/34/135', 'frontend_public' => true]);
+projectAssert($withFrontend['frontend_url'] === 'https://example.jp/map/#14/34/135' && $withFrontend['frontend_public'], 'Frontend URL and visibility must be stored.');
+$renamed = $service->update('town-map', ['project_name' => 'まち歩き地図']);
+projectAssert($renamed['frontend_url'] === $withFrontend['frontend_url'] && $renamed['frontend_public'], 'Unrelated updates must preserve frontend settings.');
+projectThrows(fn() => $service->update('town-map', ['frontend_url' => '']), ActivityValidationException::class, 'A public frontend cannot lose its URL.');
+$private = $service->update('town-map', ['frontend_url' => '', 'frontend_public' => false]);
+projectAssert($private['frontend_url'] === null && !$private['frontend_public'], 'Frontend URL can be cleared when hidden.');
+
 
 $updated = $service->update('town-map', ['project_name' => '新しい表示名', 'schema' => ['fields' => [
     'rating' => ['label' => '評価', 'type' => 'select', 'options' => ['3', '2', '1'], 'order' => 20, 'admin' => ['visible' => true, 'editable' => true, 'width' => 120]],
     'memo' => ['label' => 'メモ', 'type' => 'textarea', 'order' => 10, 'admin' => ['visible' => false, 'editable' => true, 'width' => 300]],
 ]]]);
 projectAssert($updated['app_key'] === 'town-map' && $updated['project_name'] === '新しい表示名', 'Updating a project must not change app_key.');
+projectAssert($updated['created_by_user_id'] === 11, 'Project creator must remain unchanged on update.');
 projectAssert(array_keys($updated['schema']['fields']) === ['memo', 'rating'], 'Explicit column order must be normalized and preserved.');
 projectAssert($updated['schema']['fields']['rating']['options'] === ['3', '2', '1'], 'Select option order must be preserved.');
 projectThrows(
@@ -74,8 +89,25 @@ projectAssert(!isset($checkboxSchema['fields']['confirmed']['options']), 'Boolea
 projectThrows(fn() => $service->update('town-map', ['schema' => ['fields' => ['id' => ['type' => 'text']]]]), ActivityValidationException::class, 'System columns must not be redefined.');
 projectThrows(fn() => $service->update('town-map', ['schema' => ['fields' => ['x' => ['type' => 'unknown']]]]), ActivityValidationException::class, 'Unsupported types must be rejected.');
 $service->update('town-map', ['enabled' => false]);
-projectAssert(!in_array('town-map', $schema->appKeys(), true), 'Disabled projects must not be exposed as active apps.');
-projectThrows(fn() => $schema->get('town-map'), CommunityMapMaker\Activity\UnknownAppException::class, 'Disabled project schemas must not be exposed through the Activity API.');
+projectAssert(in_array('town-map', $schema->appKeys(), true), 'Legacy disable requests must not hide projects.');
+projectAssert($schema->get('town-map') !== [], 'Project schema must remain available.');
+
+$savedProject = $repo->rows['town-map'];
+$service->delete('town-map');
+projectAssert($repo->rows['town-map']['is_deleted'] && $repo->rows['town-map']['schema'] === $savedProject['schema'], 'Project delete must retain the row and schema.');
+projectAssert($service->list() === [], 'Deleted projects must be hidden from the project list.');
+projectThrows(fn() => $service->find('town-map'), CommunityMapMaker\Activity\ProjectNotFoundException::class, 'Deleted projects must not be found.');
+projectThrows(fn() => $service->update('town-map', ['project_name' => 'Again']), CommunityMapMaker\Activity\ProjectNotFoundException::class, 'Deleted projects must not be updated.');
+projectThrows(fn() => $service->delete('town-map'), CommunityMapMaker\Activity\ProjectNotFoundException::class, 'Repeated delete must report not found.');
+projectThrows(fn() => $service->create(['app_key' => 'town-map', 'project_name' => 'Duplicate']), DuplicateProjectException::class, 'Deleted project keys must remain reserved.');
+
+$staticRepo = new MemoryProjects();
+$staticSchema = new ActivitySchema(['fixed-map' => ['schema' => ['fields' => []]]], $staticRepo);
+$staticService = new ProjectService($staticRepo, $staticSchema);
+$staticService->update('fixed-map', ['project_name' => 'Fixed map']);
+$staticService->delete('fixed-map');
+projectAssert($staticService->list() === [] && $staticSchema->appKeys() === [], 'Deleted static projects must not reappear.');
+projectThrows(fn() => $staticSchema->get('fixed-map'), CommunityMapMaker\Activity\UnknownAppException::class, 'Deleted static project schema must stay inaccessible.');
 
 echo "ProjectService behavior: ok\n";
 

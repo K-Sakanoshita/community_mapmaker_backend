@@ -22,6 +22,15 @@ services:
       - backend
       - database-host
 
+  mailpit:
+    image: axllent/mailpit:v1.27
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${CMM_TEST_MAIL_PORT:-18025}:8025"
+    networks:
+      - backend
+      - frontend
+
   web:
     build:
       context: .
@@ -42,6 +51,8 @@ services:
     depends_on:
       database:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     healthcheck:
       test: ["CMD", "php", "-r", "$$body = @file_get_contents('http://127.0.0.1:8080/api/activity-schema.php'); $$json = json_decode((string) $$body, true); exit(is_array($$json) && isset($$json['apps']) && is_array($$json['apps']) ? 0 : 1);"]
       interval: 2s

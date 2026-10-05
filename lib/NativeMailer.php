@@ -26,7 +26,7 @@ final class NativeMailer implements Mailer
     {
         $subject = sprintf('[%s] メールアドレスの確認', $this->siteName);
         $body = sprintf(
-            "%s へのユーザー登録を受け付けました。\n\nユーザーID: %s\n確認URL: %s\n有効期限: %s UTC\n\n心当たりがない場合は、このメールを無視してください。\nパスワードをメールでお知らせすることはありません。\n",
+            "%s のメールアドレス確認をお願いします。\n\nユーザーID: %s\n確認URL: %s\n有効期限: %s UTC\n\n心当たりがない場合は、このメールを無視してください。\nパスワードをメールでお知らせすることはありません。\n",
             $this->siteName,
             $this->singleLine((string)$user['userid']),
             $verificationUrl,
@@ -46,6 +46,19 @@ final class NativeMailer implements Mailer
             $expiresAt->format('Y-m-d H:i:s')
         );
         return $this->send((string)$user['email'], $subject, $body);
+    }
+
+    public function sendRegistrationNotice(string $recipient, array $user): bool
+    {
+        $subject = sprintf('[%s] 新規ユーザー登録', $this->siteName);
+        $body = sprintf(
+            "%s に新しいユーザーが登録されました。\n\nユーザーID: %s\nメールアドレス（未確認）: %s\n状態: %s\n\n管理コンソールでユーザーを確認できます。\n",
+            $this->siteName,
+            $this->singleLine((string)$user['userid']),
+            $this->singleLine((string)$user['email']),
+            ($user['status'] ?? '') === 'pending' ? 'メール確認待ち' : '登録済み'
+        );
+        return $this->send($recipient, $subject, $body);
     }
 
     private function send(string $recipient, string $subject, string $body): bool

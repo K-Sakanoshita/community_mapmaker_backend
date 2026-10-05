@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="地域の地図を見つけ、育てる。Community Map Maker の公開プロジェクトを探せます。">
+  <title>Community Map Maker | 地域の地図を見つけよう</title>
+  <link rel="stylesheet" href="portal.css?v=20261001-hero-image">
+  <script src="portal.js?v=20261001-project-japanese" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#projects">プロジェクト一覧へ移動</a>
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="Community Map Maker ホーム"><span class="brand-symbol" aria-hidden="true">⌖</span><span>COMMUNITY<br>MAP MAKER</span></a>
+    <nav class="header-links" aria-label="サイトメニュー">
+      <a href="#projects">地図を探す</a>
+      <a href="register.html">ユーザー登録</a>
+      <a class="login-link" href="admin/">ログイン <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="eyebrow-line"></span> COMMUNITY MAP MAKER</p>
+        <h1 id="hero-title">まちの発見を、<br><em>みんなの地図に。</em></h1>
+        <p class="hero-lead">地域の人が育てる地図を見つけよう。公園、文化、日々の発見。気になるプロジェクトから、そのまちへ出かけられます。</p>
+        <div class="hero-actions"><a class="primary-action" href="#projects">地図を探す <span aria-hidden="true">↗</span></a><a class="text-action" href="register.html">自分のプロジェクトをつくる <span aria-hidden="true">→</span></a></div>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <img src="portal-hero.jpg" alt="" width="1280" height="640" fetchpriority="high">
+      </div>
+    </section>
+
+    <section class="directory" id="projects" aria-labelledby="projects-title">
+      <div class="section-intro"><div><p class="eyebrow"><span class="eyebrow-line"></span> EXPLORE PROJECTS</p><h2 id="projects-title">公開されている地図</h2><p>気になる地図を見つけて、地域をもっと知ろう。</p></div><span class="project-count" id="projectCount" aria-live="polite"></span></div>
+      <div class="search-wrap"><label for="projectSearch">プロジェクトを探す</label><div class="search-field"><span aria-hidden="true">⌕</span><input id="projectSearch" type="search" placeholder="名前や説明文で検索" autocomplete="off"><kbd>/</kbd></div></div>
+      <p class="load-status" id="loadStatus" role="status" aria-live="polite">プロジェクトを読み込んでいます…</p>
+      <div class="project-grid" id="projectGrid"></div>
+      <div class="empty-state" id="emptyState" hidden><span aria-hidden="true">⌕</span><h3>該当するプロジェクトがありません</h3><p>検索語を変えて、もう一度お試しください。</p></div>
+    </section>
+
+    <section class="join-section" aria-labelledby="join-title"><div class="join-icon" aria-hidden="true">＋</div><div><p class="eyebrow">MAKE YOUR OWN MAP</p><h2 id="join-title">あなたの地域の地図も、ここから。</h2><p>メールアドレスで登録して、あなた自身のプロジェクトを作成できます。</p></div><a href="register.html">無料で始める <span aria-hidden="true">↗</span></a></section>
+  </main>
+  <footer><span>COMMUNITY MAP MAKER</span><div><a href="admin/">プロジェクト管理</a><a href="register.html">ユーザー登録</a></div></footer>
+</body>
+</html>

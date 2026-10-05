@@ -31,7 +31,8 @@ final class MemoryUsers implements UserRepositoryInterface
         $row = [
             'id' => $this->nextId++, 'userid' => $userid, 'userid_normalized' => $useridNormalized,
             'email' => $email, 'email_normalized' => $emailNormalized,
-            'password_hash' => $passwordHash, 'status' => $status, 'role' => $role, 'email_verified_at' => null,
+            'password_hash' => $passwordHash, 'status' => $status, 'role' => $role,
+            'email_verified_at' => $status === 'active' && $email !== null ? gmdate('Y-m-d H:i:s') : null,
         ];
         $this->rows[$row['id']] = $row;
         return $row;
@@ -45,6 +46,28 @@ final class MemoryUsers implements UserRepositoryInterface
             if ($row['userid_normalized'] === $identityNormalized || $row['email_normalized'] === $identityNormalized) return $row;
         }
         return null;
+    }
+
+    public function activeAdminEmails(): array
+    {
+        return array_values(array_column(array_filter($this->rows, static fn(array $row): bool => ($row['role'] ?? '') === 'admin' && ($row['status'] ?? '') === 'active' && $row['email_verified_at'] !== null && !empty($row['email'])), 'email'));
+    }
+
+    public function addEmailIfMissing(int $id, string $email, string $emailNormalized): bool
+    {
+        if (!isset($this->rows[$id]) || $this->rows[$id]['email'] !== null) return false;
+        foreach ($this->rows as $row) if ($row['email_normalized'] === $emailNormalized) throw new CommunityMapMaker\Auth\DuplicateIdentityException();
+        $this->rows[$id]['email'] = $email;
+        $this->rows[$id]['email_normalized'] = $emailNormalized;
+        $this->rows[$id]['email_verified_at'] = null;
+        return true;
+    }
+
+    public function verifyEmail(int $id): void
+    {
+        if (!isset($this->rows[$id]) || $this->rows[$id]['email'] === null) return;
+        if ($this->rows[$id]['status'] === 'pending') $this->rows[$id]['status'] = 'active';
+        $this->rows[$id]['email_verified_at'] = gmdate('Y-m-d H:i:s');
     }
 
     public function activate(int $id): void
@@ -113,6 +136,7 @@ final class RecordingMailer implements Mailer
 {
     public array $verification = [];
     public array $resets = [];
+    public array $notices = [];
     public bool $succeeds = true;
 
     public function sendVerification(array $user, string $verificationUrl, DateTimeImmutable $expiresAt): bool
@@ -124,6 +148,12 @@ final class RecordingMailer implements Mailer
     public function sendPasswordReset(array $user, string $resetUrl, DateTimeImmutable $expiresAt): bool
     {
         $this->resets[] = compact('user', 'resetUrl', 'expiresAt');
+        return $this->succeeds;
+    }
+
+    public function sendRegistrationNotice(string $recipient, array $user): bool
+    {
+        $this->notices[] = compact('recipient', 'user');
         return $this->succeeds;
     }
 }
@@ -186,6 +216,17 @@ assertTrue($users->rows[1]['email_normalized'] === 'test.user@example.jp', 'Emai
 assertTrue($users->rows[1]['password_hash'] !== 'correct horse battery staple', 'Password must not be stored as plaintext.');
 assertTrue(password_verify('correct horse battery staple', $users->rows[1]['password_hash']), 'Stored password hash must verify.');
 assertTrue($service->authenticate('test.user', 'correct horse battery staple') === null, 'Pending user must not authenticate.');
+assertTrue($mailer->notices === [], 'Registration without an active administrator email must not send a notice.');
+$users->create('admin-one', 'admin-one', 'admin@example.jp', 'admin@example.jp', 'hash', 'active', 'admin');
+$users->create('admin-two', 'admin-two', 'admin-two@example.jp', 'admin-two@example.jp', 'hash', 'active', 'admin');
+$users->create('admin-pending', 'admin-pending', 'pending-admin@example.jp', 'pending-admin@example.jp', 'hash', 'pending', 'admin');
+$users->create('ordinary', 'ordinary', 'ordinary@example.jp', 'ordinary@example.jp', 'hash', 'active', 'user');
+$service->register([
+    'userid' => 'noticed-user', 'email' => 'noticed@example.jp',
+    'password' => 'correct horse battery staple', 'password_confirmation' => 'correct horse battery staple',
+], '192.0.2.3');
+assertTrue(count($mailer->notices) === 2 && array_column($mailer->notices, 'recipient') === ['admin@example.jp', 'admin-two@example.jp'], 'Only active administrators with email must receive registration notices.');
+assertTrue($mailer->notices[0]['user']['userid'] === 'noticed-user', 'Notice must identify the newly registered user.');
 
 $verificationToken = tokenFromUrl($mailer->verification[0]['verificationUrl']);
 assertTrue(strlen($verificationToken) === 64, 'Verification URL must contain a random token.');
@@ -254,6 +295,16 @@ $failedMailResult = $failedMailService->register([
 ], '192.0.2.12');
 assertTrue($failedMailResult['verification_email_sent'] === false, 'Mail delivery failure must be reported.');
 assertTrue($failedMailUsers->rows[1]['status'] === 'pending', 'Mail delivery failure must keep the account pending for resend.');
+$noticeUsers = new MemoryUsers();
+$noticeUsers->create('admin', 'admin', 'admin@example.jp', 'admin@example.jp', 'hash', 'active', 'admin');
+$noticeMailer = new RecordingMailer();
+$noticeMailer->succeeds = false;
+$noticeService = new AuthService($noticeUsers, new MemoryTokens(), new AllowingRateLimiter(), new ImmediateTransactions(), $noticeMailer, $config);
+$noticeResult = $noticeService->register([
+    'userid' => 'notice-failure', 'email' => 'notice-failure@example.jp',
+    'password' => 'correct horse battery staple', 'password_confirmation' => 'correct horse battery staple',
+], '192.0.2.13');
+assertTrue($noticeResult['status'] === 'pending' && count($noticeMailer->notices) === 1, 'Administrator delivery failure must not undo registration.');
 
 foreach (['1234567', 'あいうえおかき'] as $short) {
     assertThrows(fn() => $directService->register([

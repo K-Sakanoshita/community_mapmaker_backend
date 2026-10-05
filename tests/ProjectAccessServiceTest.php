@@ -23,6 +23,11 @@ final class MemoryProjectAccess implements ProjectAccessRepositoryInterface
     {
         return $this->roles[$userId][$appKey] ?? null;
     }
+
+    public function assignProject(int $userId, int $projectId, string $role): void
+    {
+        $this->roles[$userId]["created-$projectId"] = $role;
+    }
 }
 
 function accessAssert(bool $condition, string $message): void
@@ -46,9 +51,9 @@ $service = new ProjectAccessService(new MemoryProjectAccess([
     11 => ['alpha' => 'project_admin'],
 ]));
 $projects = [
-    ['id' => 1, 'app_key' => 'alpha', 'project_name' => 'Alpha'],
-    ['id' => 2, 'app_key' => 'beta', 'project_name' => 'Beta'],
-    ['id' => 3, 'app_key' => 'gamma', 'project_name' => 'Gamma'],
+    ['id' => 1, 'app_key' => 'alpha', 'project_name' => 'Alpha', 'enabled' => true],
+    ['id' => 2, 'app_key' => 'beta', 'project_name' => 'Beta', 'enabled' => true],
+    ['id' => 3, 'app_key' => 'gamma', 'project_name' => 'Gamma', 'enabled' => false],
 ];
 
 $adminProjects = $service->visibleProjects(['id' => 1, 'role' => 'admin'], $projects);
@@ -56,10 +61,27 @@ accessAssert(count($adminProjects) === 3 && $adminProjects[0]['access_role'] ===
 $userProjects = $service->visibleProjects(['id' => 10, 'role' => 'user'], $projects);
 accessAssert(array_column($userProjects, 'app_key') === ['alpha', 'beta'], 'Users must only see assigned projects.');
 accessAssert(array_column($userProjects, 'access_role') === ['editor', 'viewer'], 'Assigned project roles must be exposed to the console.');
+$ownerProjects = $service->visibleProjects(['id' => 11, 'role' => 'user'], array_merge($projects, [['id' => 4, 'app_key' => 'delta', 'project_name' => 'Delta', 'enabled' => false]]));
+accessAssert(array_column($ownerProjects, 'app_key') === ['alpha'], 'Users must see only assigned projects.');
+$service->assignCreatedProject(['id' => 11, 'role' => 'user'], ['id' => 4]);
+$ownerProjects = $service->visibleProjects(['id' => 11, 'role' => 'user'], array_merge($projects, [['id' => 4, 'app_key' => 'created-4', 'project_name' => 'Delta', 'enabled' => false]]));
+accessAssert(array_column($ownerProjects, 'app_key') === ['alpha', 'created-4'], 'Project admins must see assigned projects.');
 
 $service->assertCanWrite(['id' => 1, 'role' => 'admin'], 'gamma');
 $service->assertCanWrite(['id' => 10, 'role' => 'user'], 'alpha');
 $service->assertCanWrite(['id' => 11, 'role' => 'user'], 'alpha');
+$service->assertCanManage(['id' => 1, 'role' => 'admin'], 'gamma');
+$service->assertCanManage(['id' => 11, 'role' => 'user'], 'alpha');
+accessDenied(fn() => $service->assertCanManage(['id' => 10, 'role' => 'user'], 'alpha'), 'Editors must not manage project settings.');
+accessDenied(fn() => $service->assertCanManage(['id' => 10, 'role' => 'user'], 'gamma'), 'Unassigned users must not manage other projects.');
+$service->assignCreatedProject(['id' => 12, 'role' => 'user'], ['id' => 4]);
+$service->assertCanManage(['id' => 12, 'role' => 'user'], 'created-4');
+$ownedProject = ['app_key' => 'created-4', 'created_by_user_id' => 11];
+$service->assertCanDelete(['id' => 1, 'role' => 'admin'], $ownedProject);
+$service->assertCanDelete(['id' => 11, 'role' => 'user'], $ownedProject);
+accessDenied(fn() => $service->assertCanDelete(['id' => 12, 'role' => 'user'], $ownedProject), 'Assigned project admins must not delete another creator’s project.');
+accessDenied(fn() => $service->assertCanDelete(['id' => 11, 'role' => 'user'], ['app_key' => 'alpha', 'created_by_user_id' => null]), 'Legacy projects without a recorded creator must be admin-only for deletion.');
+accessDenied(fn() => $service->assertCanDelete(['id' => 10, 'role' => 'user'], ['app_key' => 'alpha', 'created_by_user_id' => 10]), 'Creators without project-admin access must not delete.');
 accessDenied(fn() => $service->assertCanWrite(['id' => 10, 'role' => 'user'], 'beta'), 'Viewer assignments must be read-only.');
 accessDenied(fn() => $service->assertCanWrite(['id' => 10, 'role' => 'user'], 'gamma'), 'Unassigned projects must reject writes.');
 accessDenied(fn() => $service->assertCanWrite(['id' => 12, 'role' => 'user'], 'alpha'), 'Users without assignments must reject writes.');

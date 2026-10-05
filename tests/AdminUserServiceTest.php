@@ -52,6 +52,24 @@ final class AdminMemoryUsers implements UserRepositoryInterface, AdminUserReposi
         foreach ($this->rows as $row) if ($row['userid_normalized'] === $identityNormalized || $row['email_normalized'] === $identityNormalized) return $row;
         return null;
     }
+    public function activeAdminEmails(): array
+    {
+        return array_values(array_column(array_filter($this->rows, static fn(array $row): bool => $row['role'] === 'admin' && $row['status'] === 'active' && $row['email'] !== null), 'email'));
+    }
+    public function addEmailIfMissing(int $id, string $email, string $emailNormalized): bool
+    {
+        if (!isset($this->rows[$id]) || $this->rows[$id]['email'] !== null) return false;
+        foreach ($this->rows as $row) if ($row['email_normalized'] === $emailNormalized) throw new DuplicateIdentityException();
+        $this->rows[$id]['email'] = $email; $this->rows[$id]['email_normalized'] = $emailNormalized;
+        $this->rows[$id]['email_verified_at'] = null;
+        return true;
+    }
+    public function verifyEmail(int $id): void
+    {
+        if (!isset($this->rows[$id]) || $this->rows[$id]['email'] === null) return;
+        if ($this->rows[$id]['status'] === 'pending') $this->rows[$id]['status'] = 'active';
+        $this->rows[$id]['email_verified_at'] = gmdate('Y-m-d H:i:s');
+    }
     public function activate(int $id): void
     {
         if (($this->rows[$id]['status'] ?? '') === 'pending') {
@@ -92,7 +110,7 @@ final class AdminMemoryUsers implements UserRepositoryInterface, AdminUserReposi
     private function safe(array $row): array
     {
         return array_intersect_key($row, array_flip(['id', 'userid', 'email', 'status', 'role', 'email_verified_at', 'last_login_at', 'created_at', 'updated_at']))
-            + ['activity_count' => 0, 'project_count' => count($this->projects[$row['id']] ?? [])];
+            + ['activity_count' => 0, 'owned_project_count' => 0, 'project_count' => count($this->projects[$row['id']] ?? [])];
     }
 }
 
@@ -118,6 +136,7 @@ final class AdminRecordingMailer implements Mailer
     public array $verification = []; public array $resets = [];
     public function sendVerification(array $user, string $verificationUrl, DateTimeImmutable $expiresAt): bool { $this->verification[] = $verificationUrl; return true; }
     public function sendPasswordReset(array $user, string $resetUrl, DateTimeImmutable $expiresAt): bool { $this->resets[] = $resetUrl; return true; }
+    public function sendRegistrationNotice(string $recipient, array $user): bool { return true; }
 }
 final class AdminMemoryAudit implements AuditLogRepositoryInterface
 {
@@ -182,12 +201,29 @@ adminThrows(fn() => $service->create([
     'userid' => 'bad-managed', 'password' => 'managed password', 'password_confirmation' => 'different password', 'projects' => [],
 ], (int)$admin['id'], '127.0.0.1'), ValidationException::class, 'Direct creation must validate password confirmation.');
 adminThrows(fn() => $service->sendPasswordReset((int)$managed['id'], (int)$admin['id'], '127.0.0.1'), ValidationException::class, 'Users without email addresses must not receive password reset mail.');
+adminThrows(fn() => $service->addEmail((int)$managed['id'], ['email' => 'invalid'], (int)$admin['id'], '127.0.0.1'), ValidationException::class, 'Added email must be valid.');
+adminThrows(fn() => $service->addEmail((int)$managed['id'], ['email' => 'admin@example.jp'], (int)$admin['id'], '127.0.0.1'), DuplicateIdentityException::class, 'Added email must be unique.');
+$addedEmail = $service->addEmail((int)$managed['id'], ['email' => 'Managed+New@Example.jp'], (int)$admin['id'], '127.0.0.1');
+adminAssert($addedEmail['email'] === 'Managed+New@Example.jp' && $addedEmail['email_verified_at'] === null && $addedEmail['status'] === 'active', 'Adding email must retain the account status and require verification.');
+adminAssert($users->rows[$managed['id']]['email_normalized'] === 'managed+new@example.jp' && $addedEmail['verification_email_sent'], 'Added email must be normalized and receive verification mail.');
+adminAssert($auth->authenticate('managed+new@example.jp', 'updated managed password') === null, 'Unverified email must not be usable to sign in.');
+adminAssert($auth->authenticate('managed-user', 'updated managed password') !== null, 'Existing user ID login must continue before email verification.');
+$resetsBeforeVerification = count($mailer->resets);
+$auth->requestPasswordReset(['email' => 'managed+new@example.jp'], '127.0.0.1');
+adminAssert(count($mailer->resets) === $resetsBeforeVerification, 'Unverified added email must not receive password reset mail.');
+adminThrows(fn() => $service->sendPasswordReset((int)$managed['id'], (int)$admin['id'], '127.0.0.1'), ValidationException::class, 'Admin reset must reject an unverified added email.');
+$service->resendVerification((int)$managed['id'], (int)$admin['id'], '127.0.0.1');
+adminAssert(count($mailer->verification) === 2, 'An active user with added email must be able to receive verification again.');
+$auth->verifyEmail(adminToken($mailer->verification[1]));
+adminAssert($users->rows[$managed['id']]['email_verified_at'] !== null && $users->rows[$managed['id']]['status'] === 'active', 'Verifying an added email must not interrupt an active account.');
+adminAssert($auth->authenticate('managed+new@example.jp', 'updated managed password') !== null, 'Verified added email must work for login.');
+adminThrows(fn() => $service->addEmail((int)$managed['id'], ['email' => 'second@example.jp'], (int)$admin['id'], '127.0.0.1'), ValidationException::class, 'A second email cannot be added through the add-only action.');
 $updated = $service->update((int)$invited['id'], ['status' => 'disabled', 'role' => 'user'], (int)$admin['id']);
 adminAssert($updated['status'] === 'disabled' && $users->projects[$invited['id']][0]['project_id'] === 10, 'Disabling a user must preserve project assignments unless explicitly replaced.');
 adminThrows(fn() => $service->update((int)$admin['id'], ['role' => 'user'], (int)$admin['id']), LastAdminException::class, 'The last active admin must not be demoted.');
 $pending = $service->create(['userid' => 'pending-user', 'email' => 'pending@example.jp', 'projects' => []], (int)$admin['id'], '127.0.0.1');
 $service->resendVerification((int)$pending['id'], (int)$admin['id'], '127.0.0.1');
-adminAssert(count($mailer->verification) === 1, 'Pending users must be able to receive verification mail.');
+adminAssert(count($mailer->verification) === 3, 'Pending users must be able to receive verification mail.');
 $service->sendPasswordReset((int)$admin['id'], (int)$admin['id'], '127.0.0.1');
 adminAssert(count($mailer->resets) === 3, 'Active users must be able to receive admin-triggered password reset mail.');
 adminThrows(fn() => $service->sendPasswordReset((int)$invited['id'], (int)$admin['id'], '127.0.0.1'), ValidationException::class, 'Disabled users must not receive password reset mail.');

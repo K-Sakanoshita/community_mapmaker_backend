@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>ユーザー登録 | Community Map Maker</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 20px; box-sizing: border-box; background: #edf4ef; color: #173f32; font-family: system-ui, sans-serif; }
+    main { width: min(100%, 440px); padding: 30px; box-sizing: border-box; border-radius: 12px; background: #fff; box-shadow: 0 10px 35px #173f321a; }
+    h1 { margin: 0 0 8px; font-size: 1.7rem; } p { line-height: 1.55; }
+    label { display: block; margin: 17px 0 0; font-weight: 700; font-size: .9rem; }
+    input { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 11px; border: 1px solid #8ea69a; border-radius: 6px; font: inherit; }
+    button { width: 100%; margin-top: 23px; padding: 12px; border: 0; border-radius: 6px; background: #16794e; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: wait; } a { color: #126d49; }
+    .hint { color: #52675d; font-size: .85rem; } .error { color: #a21f1f; } .success { color: #11633d; }
+    #status { min-height: 1.5em; } .links { margin-top: 22px; text-align: center; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>ユーザー登録</h1>
+  <p>ユーザー登録にはメール認証が必要です。</p>
+  <form id="registerForm">
+    <label>ユーザーID<input name="userid" autocomplete="username" minlength="3" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,63}" required></label>
+    <p class="hint">英数字で始まる3〜64文字。英数字、ピリオド、アンダースコア、ハイフンを使えます。</p>
+    <label>メールアドレス<input name="email" type="email" autocomplete="email" maxlength="255" required></label>
+    <label>パスワード<input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+    <p class="hint">8文字以上で設定してください。</p>
+    <label>パスワード（確認）<input name="password_confirmation" type="password" autocomplete="new-password" minlength="8" required></label>
+    <button type="submit">登録して確認メールを送る</button>
+  </form>
+  <p id="status" role="status" aria-live="polite"></p>
+  <form id="resendForm" hidden>
+    <p>届かない場合は迷惑メールフォルダを確認し、時間をおいて再送してください。</p>
+    <button type="submit">確認メールを再送</button>
+  </form>
+  <p class="links"><a href="admin/">ログイン画面へ戻る</a></p>
+</main>
+<script>
+'use strict';
+const registerForm = document.getElementById('registerForm');
+const resendForm = document.getElementById('resendForm');
+const statusText = document.getElementById('status');
+let registeredEmail = '';
+async function post(path, body) {
+  const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(body) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.code || `HTTP ${response.status}`);
+  return data;
+}
+function showStatus(message, error = false) {
+  statusText.textContent = message;
+  statusText.className = error ? 'error' : 'success';
+}
+registerForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const fields = Object.fromEntries(new FormData(registerForm));
+  if (fields.password !== fields.password_confirmation) { showStatus('確認用パスワードが一致しません。', true); return; }
+  const button = registerForm.querySelector('button');
+  button.disabled = true;
+  showStatus('登録中…');
+  try {
+    const result = await post('auth/register.php', fields);
+    registeredEmail = fields.email;
+    registerForm.hidden = true;
+    if (result.verification_required) {
+      showStatus(result.verification_email_sent ? '確認メールを送信しました。メール内のリンクを開いてください。' : '登録は受け付けましたが、メールを送信できませんでした。再送をお試しください。', !result.verification_email_sent);
+      resendForm.hidden = false;
+    } else {
+      showStatus('登録が完了しました。ログインしてください。');
+    }
+  } catch (error) {
+    const messages = { identity_already_registered: 'ユーザーIDまたはメールアドレスを使用できません。別のものを入力するか、ログインをお試しください。', rate_limit_exceeded: '操作が多すぎます。しばらく待ってから再度お試しください。', validation_failed: '入力内容を確認してください。', registration_disabled: '現在、ユーザー登録を受け付けていません。' };
+    showStatus(messages[error.message] || '登録できませんでした。しばらくしてから再度お試しください。', true);
+  } finally { button.disabled = false; }
+});
+resendForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = resendForm.querySelector('button');
+  button.disabled = true;
+  try {
+    await post('auth/resend-verification.php', { identity: registeredEmail });
+    showStatus('再送を受け付けました。メールをご確認ください。');
+  } catch (error) {
+    showStatus(error.message === 'rate_limit_exceeded' ? '再送まで少しお待ちください。' : '再送できませんでした。時間をおいてお試しください。', true);
+  } finally { button.disabled = false; }
+});
+</script>
+</body>
+</html>
