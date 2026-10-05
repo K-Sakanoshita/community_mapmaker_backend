@@ -15,6 +15,9 @@ if ($method === 'GET') {
         $appKey = ActivityApi::appKey();
         $activityKey = ActivityApi::optionalActivityKey();
         if ($activityKey !== null) {
+            foreach (['updated_since', 'limit', 'summary'] as $parameter) {
+                if (array_key_exists($parameter, $_GET)) throw new ActivityValidationException([$parameter => 'Only supported for list requests.']);
+            }
             return [200, $container['activity']->find($appKey, $activityKey)];
         }
         $unsupported = ['mode', 'score_min', 'attributes', 'match_mode', 'recent_only', 'photo_only', 'detail_only', 'research_mode', 'page', 'per_page'];
@@ -34,7 +37,7 @@ if ($method === 'GET') {
             return [200, $rows];
         }
         $osmid = isset($_GET['osmid']) ? trim((string)$_GET['osmid']) : null;
-        $rows = $container['activity']->list($appKey, $osmid);
+        $rows = $container['activity']->list($appKey, $osmid, $_GET);
         if (strtolower((string)($_GET['format'] ?? 'json')) === 'csv') {
             outputCsv($rows, $container['activity_schema']->get($appKey));
         }
@@ -68,7 +71,10 @@ ActivityApi::run(function () use ($container, $method): array {
 function outputCsv(array $rows, array $schema): never
 {
     $fields = ['id', 'osmid', 'latitude', 'longitude', 'form_key'];
-    foreach (array_keys((array)$schema['fields']) as $field) {
+    if ((string)($_GET['summary'] ?? '0') === '1') {
+        $fields = ['id', 'osmid', 'created_at', 'updated_at', 'latitude', 'longitude', 'form_key', 'name'];
+    }
+    foreach ((string)($_GET['summary'] ?? '0') === '1' ? [] : array_keys((array)$schema['fields']) as $field) {
         if (!in_array($field, $fields, true)) $fields[] = $field;
     }
     header('Content-Type: text/csv; charset=UTF-8');

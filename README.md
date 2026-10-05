@@ -144,6 +144,10 @@ GET api/activities.php?app=playgrounds&format=csv
 
 通常のGETはフラットなActivity配列を返し、`id`指定時は該当する1件のActivityオブジェクトを返します。`bbox`指定時は範囲内のActivityと座標未登録のActivityの配列を、`osmids`指定時は候補OSM IDに紐づくActivity配列を返します。両方を指定した場合は`osmids`を優先し、`bbox`を無視します。CSVは共通列（`id`、`osmid`、`latitude`、`longitude`、`form_key`）とSchemaに定義された列を出力します。
 
+新着一覧は `GET api/activities.php?app=playgrounds&limit=30&summary=1` で取得できます。`updated_since=2026-10-05T10:00:00%2B09:00` を追加すると、その日時以降（境界を含む）の更新に絞ります。日時はタイムゾーン付きRFC3339形式（`Z` または `±HH:MM`、小数秒は最大6桁）で指定し、UTCに変換して比較します。URL中の `+` は `%2B` にエンコードしてください。`limit` は1〜100の整数で、100を超える指定や不正な引数は422です。省略時は従来どおり件数を制限しません。
+
+`summary=1` は `id`、`osmid`、`created_at`、`updated_at`、`latitude`、`longitude` と、存在する場合の `form_key`、`name` だけを返します。表示名は投稿の `name` フィールドです。日時の返却形式は従来のUTC日時文字列を維持します。`summary=0` または省略時は全フィールドを返します。追加引数は一覧専用で、`osmid`、`osmids`、`bbox` およびCSVと併用できます。更新日時の降順、同時刻なら内部IDの降順で返し、削除済みは除外します。引数をすべて省略した場合は従来の動作を維持します。最新30件の表示用であり、更新の全件取得には別途ページ分割が必要です。
+
 ### Activityの位置スナップショット
 
 `latitude` / `longitude` はActivity本体の任意の共通メタデータで、Schemaのユーザー入力フィールドには定義しません。作成・更新時にクライアントが把握した位置を保存し、外部OSMサービスからの取得・同期は行いません。

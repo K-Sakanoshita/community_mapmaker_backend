@@ -14,7 +14,7 @@ final class ActivityRepository implements ActivityRepositoryInterface
     {
     }
 
-    public function list(string $appKey, ?string $osmid = null): array
+    public function list(string $appKey, ?string $osmid = null, array $options = []): array
     {
         $sql = 'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at '
             . 'FROM activities WHERE is_deleted = 0 AND app_key = :app_key';
@@ -24,12 +24,12 @@ final class ActivityRepository implements ActivityRepositoryInterface
             $params[':osmid'] = $osmid;
         }
         $sql .= ' ORDER BY updated_at DESC, id DESC';
-        $statement = $this->pdo->prepare($sql);
+        $statement = $this->pdo->prepare($this->listSql($sql, $options));
         $statement->execute($params);
         return array_map(fn(array $row): array => $this->decode($row), $statement->fetchAll());
     }
 
-    public function searchRows(string $appKey, ?array $bbox = null, ?array $osmids = null): array
+    public function searchRows(string $appKey, ?array $bbox = null, ?array $osmids = null, array $options = []): array
     {
         if ($osmids === []) return [];
         if ($bbox !== null && $osmids === null) {
@@ -37,7 +37,7 @@ final class ActivityRepository implements ActivityRepositoryInterface
             $sql = $select . ':app_key_bbox AND longitude BETWEEN :west AND :east AND latitude BETWEEN :south AND :north '
                 . 'UNION ALL ' . $select . ':app_key_unlocated AND longitude IS NULL AND latitude IS NULL '
                 . 'ORDER BY updated_at DESC, id DESC';
-            $statement = $this->pdo->prepare($sql);
+            $statement = $this->pdo->prepare($this->listSql($sql, $options));
             $statement->execute([
                 ':app_key_bbox' => $appKey, ':app_key_unlocated' => $appKey,
                 ':west' => $bbox[0], ':south' => $bbox[1], ':east' => $bbox[2], ':north' => $bbox[3],
@@ -61,9 +61,19 @@ final class ActivityRepository implements ActivityRepositoryInterface
             $sql .= ' AND osmid IN (' . implode(', ', $placeholders) . ')';
         }
         $sql .= ' ORDER BY updated_at DESC, id DESC';
-        $statement = $this->pdo->prepare($sql);
+        $statement = $this->pdo->prepare($this->listSql($sql, $options));
         $statement->execute($params);
         return array_map(fn(array $row): array => $this->decode($row), $statement->fetchAll());
+    }
+
+    private function listSql(string $sql, array $options): string
+    {
+        if (($options['updated_since'] ?? null) !== null) {
+            $sql = 'SELECT * FROM (' . $sql . ') AS selected_activities WHERE updated_at >= '
+                . $this->pdo->quote($options['updated_since']) . ' ORDER BY updated_at DESC, id DESC';
+        }
+        if (($options['limit'] ?? null) !== null) $sql .= ' LIMIT ' . (int)$options['limit'];
+        return $sql;
     }
 
     public function find(string $appKey, string $activityKey): ?array

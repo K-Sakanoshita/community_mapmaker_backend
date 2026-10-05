@@ -62,9 +62,9 @@ namespace CommunityMapMaker\Activity;
 
 interface ActivityRepositoryInterface
 {
-    public function list(string $appKey, ?string $osmid = null): array;
+    public function list(string $appKey, ?string $osmid = null, array $options = []): array;
     /** @param array{0: float, 1: float, 2: float, 3: float}|null $bbox */
-    public function searchRows(string $appKey, ?array $bbox = null, ?array $osmids = null): array;
+    public function searchRows(string $appKey, ?array $bbox = null, ?array $osmids = null, array $options = []): array;
     public function find(string $appKey, string $activityKey): ?array;
     /** Include a soft-deleted row when matching an import key. */
     public function findForImport(string $appKey, string $activityKey): ?array;

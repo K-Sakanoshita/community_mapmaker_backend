@@ -18,14 +18,14 @@ final class MemoryActivities implements ActivityRepositoryInterface
     public array $rows = [];
     private int $nextId = 1;
 
-    public function list(string $appKey, ?string $osmid = null): array
+    public function list(string $appKey, ?string $osmid = null, array $options = []): array
     {
         return array_values(array_filter($this->rows, fn(array $row): bool =>
             $row['app_key'] === $appKey && ($osmid === null || $row['osmid'] === $osmid)
         ));
     }
 
-    public function searchRows(string $appKey, ?array $bbox = null, ?array $osmids = null): array
+    public function searchRows(string $appKey, ?array $bbox = null, ?array $osmids = null, array $options = []): array
     {
         return array_values(array_filter($this->list($appKey), static function (array $row) use ($bbox, $osmids): bool {
             if ($osmids !== null && !in_array($row['osmid'], $osmids, true)) return false;

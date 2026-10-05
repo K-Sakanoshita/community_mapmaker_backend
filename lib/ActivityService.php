@@ -22,11 +22,12 @@ final class ActivityService
     ) {
     }
 
-    public function list(string $appKey, ?string $osmid = null): array
+    public function list(string $appKey, ?string $osmid = null, array $input = []): array
     {
         $this->schema->appConfig($appKey);
         if ($osmid !== null) $this->validateOsmid($osmid);
-        return array_map(fn(array $row): array => $this->flatten($row), $this->repository->list($appKey, $osmid));
+        $options = $this->listOptions($input);
+        return $this->listOutput($this->repository->list($appKey, $osmid, $options), $options);
     }
 
     public function listSelected(string $appKey, array $input): array
@@ -34,7 +35,56 @@ final class ActivityService
         $this->schema->appConfig($appKey);
         $osmids = array_key_exists('osmids', $input) ? $this->parseOsmids($input['osmids']) : null;
         $bbox = $osmids === null && array_key_exists('bbox', $input) ? $this->parseBbox($input['bbox']) : null;
-        return array_map(fn(array $row): array => $this->flatten($row), $this->repository->searchRows($appKey, $bbox, $osmids));
+        $options = $this->listOptions($input);
+        return $this->listOutput($this->repository->searchRows($appKey, $bbox, $osmids, $options), $options);
+    }
+
+    private function listOptions(array $input): array
+    {
+        $options = [];
+        if (array_key_exists('limit', $input)) {
+            $value = $input['limit'];
+            if (!(is_string($value) || is_int($value)) || !preg_match('/\A[1-9][0-9]{0,2}\z/', (string)$value) || (int)$value > 100) {
+                throw new ActivityValidationException(['limit' => 'Expected an integer between 1 and 100.']);
+            }
+            $options['limit'] = (int)$value;
+        }
+        if (array_key_exists('summary', $input)) {
+            if (!in_array($input['summary'], ['0', '1', 0, 1], true)) {
+                throw new ActivityValidationException(['summary' => 'Expected 0 or 1.']);
+            }
+            $options['summary'] = (string)$input['summary'] === '1';
+        }
+        if (array_key_exists('updated_since', $input)) {
+            $value = $input['updated_since'];
+            if (!is_string($value) || !preg_match('/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)\z/', $value)) {
+                throw new ActivityValidationException(['updated_since' => 'Expected an RFC3339 datetime with a timezone.']);
+            }
+            try {
+                $date = new \DateTimeImmutable($value);
+            } catch (\Exception) {
+                throw new ActivityValidationException(['updated_since' => 'Expected a valid datetime.']);
+            }
+            $errors = \DateTimeImmutable::getLastErrors();
+            if ($errors !== false && ($errors['warning_count'] || $errors['error_count'])) {
+                throw new ActivityValidationException(['updated_since' => 'Expected a valid datetime.']);
+            }
+            $date = $date->setTimezone(new \DateTimeZone('UTC'));
+            // Stored timestamps have second precision; round a fractional cutoff up.
+            if ($date->format('u') !== '000000') $date = $date->modify('+1 second');
+            $options['updated_since'] = $date->format('Y-m-d H:i:s');
+        }
+        return $options;
+    }
+
+    private function listOutput(array $rows, array $options): array
+    {
+        return array_map(function (array $row) use ($options): array {
+            $flat = $this->flatten($row);
+            return ($options['summary'] ?? false)
+                ? array_intersect_key($flat, array_flip(['id', 'osmid', 'created_at', 'updated_at', 'latitude', 'longitude', 'form_key', 'name']))
+                : $flat;
+        }, $rows);
     }
 
     private function parseOsmids(mixed $value): array

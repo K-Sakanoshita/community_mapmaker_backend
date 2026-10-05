@@ -125,3 +125,34 @@ $throws(fn() => $service->listSelected('test', ['bbox' => '135,35,134,36']), Com
 $throws(fn() => $service->listSelected('test', ['osmids' => 'invalid']), CommunityMapMaker\Activity\ActivityValidationException::class);
 
 echo "ActivityRepository tests passed.\n";
+
+// Recent-list options run against temporary tables only.
+$pdo->exec("UPDATE activities SET updated_at='2026-10-01 00:00:00' WHERE app_key='test'");
+$repo->create('test', 'recent/1', 'visit', 'node/900', ['name' => '表示名', 'body' => str_repeat('detail', 100)], null, ['latitude' => 35, 'longitude' => 135]);
+$repo->create('test', 'recent/2', null, 'node/901', ['name' => 'second']);
+$repo->create('test', 'recent/deleted', null, 'node/902', ['name' => 'deleted']);
+$repo->delete('test', 'recent/deleted');
+$pdo->exec("UPDATE activities SET updated_at='2026-10-05 01:00:00' WHERE activity_key LIKE 'recent/%'");
+$options = ['updated_since' => '2026-10-05T10:00:00+09:00', 'limit' => '1', 'summary' => '1'];
+$recent = $service->list('test', null, $options);
+$check(array_column($recent, 'id') === ['recent/2'], 'Inclusive UTC cutoff, tie order, limit and deletion exclusion');
+$check($recent[0]['name'] === 'second' && !isset($recent[0]['body']), 'Summary projects display name without details');
+$one = $service->list('test', 'node/900', $options)[0];
+$check($one['form_key'] === 'visit' && $one['latitude'] === 35.0 && !isset($one['body']), 'OSM filter and summary coordinates');
+$check(count($service->list('test', null, ['updated_since' => '2026-10-05T01:00:00Z'])) === 2, 'Cutoff alone keeps all matching rows');
+$check($service->list('test', null, ['updated_since' => '2026-10-05T01:00:00.000001Z']) === [], 'Fractional cutoff excludes earlier whole second');
+$check($service->list('test', 'node/900')[0]['body'] === str_repeat('detail', 100), 'Legacy full output unchanged');
+$check($service->list('test', 'node/900', ['summary' => '0'])[0]['body'] === str_repeat('detail', 100), 'Explicit summary=0 keeps full output');
+$check(array_column($service->listSelected('test', $options + ['bbox' => '135,35,135.5,35.5']), 'id') === ['recent/2'], 'Recent options apply to BBOX union including unlocated rows');
+$check(array_column($service->listSelected('test', $options + ['osmids' => 'node/900', 'bbox' => 'invalid']), 'id') === ['recent/1'], 'Recent options preserve OSM candidate precedence');
+$check(count($service->list('test', null, ['limit' => '100'])) > 2, 'Maximum accepted and legacy records remain');
+foreach (['0', '-1', '101', '1.5', '1e2', '', [], '999999999999999999'] as $invalid) {
+    $throws(fn() => $service->list('test', null, ['limit' => $invalid]), CommunityMapMaker\Activity\ActivityValidationException::class);
+}
+foreach (['2026-10-05T01:00:00', '2026-02-30T01:00:00Z', '2026-10-05T25:00:00Z', 'tomorrow', [], '2026-10-05T01:00:00+24:00'] as $invalid) {
+    $throws(fn() => $service->list('test', null, ['updated_since' => $invalid]), CommunityMapMaker\Activity\ActivityValidationException::class);
+}
+foreach (['2', '', [], true] as $invalid) {
+    $throws(fn() => $service->list('test', null, ['summary' => $invalid]), CommunityMapMaker\Activity\ActivityValidationException::class);
+}
+echo "Recent Activity list tests passed.\n";
