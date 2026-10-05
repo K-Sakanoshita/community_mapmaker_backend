@@ -70,9 +70,9 @@ ActivityApi::run(function () use ($container, $method): array {
 
 function outputCsv(array $rows, array $schema): never
 {
-    $fields = ['id', 'osmid', 'latitude', 'longitude', 'form_key'];
+    $fields = ['id', 'osmid', 'latitude', 'longitude', 'form_key', 'updated_by_userid'];
     if ((string)($_GET['summary'] ?? '0') === '1') {
-        $fields = ['id', 'osmid', 'created_at', 'updated_at', 'latitude', 'longitude', 'form_key', 'name'];
+        $fields = ['id', 'osmid', 'created_at', 'updated_at', 'latitude', 'longitude', 'form_key', 'name', 'updated_by_userid'];
     }
     foreach ((string)($_GET['summary'] ?? '0') === '1' ? [] : array_keys((array)$schema['fields']) as $field) {
         if (!in_array($field, $fields, true)) $fields[] = $field;

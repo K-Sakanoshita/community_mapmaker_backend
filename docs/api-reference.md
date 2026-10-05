@@ -118,13 +118,14 @@
 | `id` | string | 投稿ID。DBの内部IDは返さない |
 | `osmid` | string | OSM ID |
 | `created_at`, `updated_at` | string | 作成・更新日時（UTC） |
+| `updated_by_userid` | string / null | 最終編集者のログイン用ユーザーID（`users.userid`）。未記録・ユーザー削除済みはnull |
 | `latitude`, `longitude` | number / null | 保存済み位置スナップショット。常に返す |
 | `form_key` | string | 存在する場合のみ |
 | 可変項目 | Schema・保存値による | `name`、`title`、`body`などを同じ階層へ展開 |
 
-`summary=1`では`id`・`osmid`・日時・座標と、存在する場合の`form_key`・`name`だけを返します。表示名は保存された`name`です。DB内部ID・`data_json`・削除フラグは返しません。
+`summary=1`では`id`・`osmid`・日時・座標・`updated_by_userid`と、存在する場合の`form_key`・`name`だけを返します。表示名は保存された`name`です。DB内部ID・`data_json`・削除フラグは返しません。
 
-CSVの通常列は`id,osmid,latitude,longitude,form_key`とSchemaの定義列です。`summary=1`のCSVは`id,osmid,created_at,updated_at,latitude,longitude,form_key,name`です。
+CSVの通常列は`id,osmid,latitude,longitude,form_key,updated_by_userid`とSchemaの定義列です。`summary=1`のCSVは`id,osmid,created_at,updated_at,latitude,longitude,form_key,name,updated_by_userid`です。
 
 ```sh
 curl --get 'http://127.0.0.1:18080/api/activities.php' \
@@ -152,7 +153,7 @@ POST・PUTは次の本文を送ります。PUTは部分更新ではなく、Sche
 | `form_key` | 任意 |
 | `latitude`, `longitude` | 任意。変更する場合は必ず両方を指定（下表） |
 | 可変項目 | 対象アプリのSchemaで検証。Schemaにない安全なキーも保持 |
-| `created_at`, `updated_at`, `is_deleted`, `deleted_at` | サーバー管理項目。入力しても設定されない |
+| `created_at`, `updated_at`, `updated_by_userid`, `is_deleted`, `deleted_at` | サーバー管理項目。入力しても設定されない |
 
 ```json
 {

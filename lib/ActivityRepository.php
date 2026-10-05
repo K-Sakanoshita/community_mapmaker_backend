@@ -16,7 +16,7 @@ final class ActivityRepository implements ActivityRepositoryInterface
 
     public function list(string $appKey, ?string $osmid = null, array $options = []): array
     {
-        $sql = 'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at '
+        $sql = 'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at, (SELECT userid FROM users WHERE users.id = activities.updated_by_user_id) AS updated_by_userid '
             . 'FROM activities WHERE is_deleted = 0 AND app_key = :app_key';
         $params = [':app_key' => $appKey];
         if ($osmid !== null) {
@@ -33,7 +33,7 @@ final class ActivityRepository implements ActivityRepositoryInterface
     {
         if ($osmids === []) return [];
         if ($bbox !== null && $osmids === null) {
-            $select = 'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at FROM activities WHERE is_deleted = 0 AND app_key = ';
+            $select = 'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at, (SELECT userid FROM users WHERE users.id = activities.updated_by_user_id) AS updated_by_userid FROM activities WHERE is_deleted = 0 AND app_key = ';
             $sql = $select . ':app_key_bbox AND longitude BETWEEN :west AND :east AND latitude BETWEEN :south AND :north '
                 . 'UNION ALL ' . $select . ':app_key_unlocated AND longitude IS NULL AND latitude IS NULL '
                 . 'ORDER BY updated_at DESC, id DESC';
@@ -44,7 +44,7 @@ final class ActivityRepository implements ActivityRepositoryInterface
             ]);
             return array_map(fn(array $row): array => $this->decode($row), $statement->fetchAll());
         }
-        $sql = 'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at '
+        $sql = 'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at, (SELECT userid FROM users WHERE users.id = activities.updated_by_user_id) AS updated_by_userid '
             . 'FROM activities WHERE is_deleted = 0 AND app_key = :app_key';
         $params = [':app_key' => $appKey];
         if ($bbox !== null) {
@@ -79,7 +79,7 @@ final class ActivityRepository implements ActivityRepositoryInterface
     public function find(string $appKey, string $activityKey): ?array
     {
         $statement = $this->pdo->prepare(
-            'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at '
+            'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at, (SELECT userid FROM users WHERE users.id = activities.updated_by_user_id) AS updated_by_userid '
             . 'FROM activities WHERE is_deleted = 0 AND app_key = :app_key AND activity_key = :activity_key LIMIT 1'
         );
         $statement->execute([':app_key' => $appKey, ':activity_key' => $activityKey]);
@@ -90,7 +90,7 @@ final class ActivityRepository implements ActivityRepositoryInterface
     public function findForImport(string $appKey, string $activityKey): ?array
     {
         $statement = $this->pdo->prepare(
-            'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at, is_deleted '
+            'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at, (SELECT userid FROM users WHERE users.id = activities.updated_by_user_id) AS updated_by_userid, is_deleted '
             . 'FROM activities WHERE app_key = :app_key AND activity_key = :activity_key LIMIT 1'
         );
         $statement->execute([':app_key' => $appKey, ':activity_key' => $activityKey]);

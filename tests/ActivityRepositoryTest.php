@@ -156,3 +156,28 @@ foreach (['2', '', [], true] as $invalid) {
     $throws(fn() => $service->list('test', null, ['summary' => $invalid]), CommunityMapMaker\Activity\ActivityValidationException::class);
 }
 echo "Recent Activity list tests passed.\n";
+
+// Shadow users as well, so editor rename/deletion never touches real accounts.
+$usersDdl = $pdo->query('SHOW CREATE TABLE users')->fetch()['Create Table'];
+$pdo->exec(str_replace('CREATE TABLE', 'CREATE TEMPORARY TABLE', $usersDdl));
+$pdo->exec("INSERT INTO users (id, userid, userid_normalized, password_hash, status, role, created_at, updated_at) VALUES
+    (900000001, 'editor-first', 'editor-first', 'unused', 'active', 'user', UTC_TIMESTAMP(), UTC_TIMESTAMP()),
+    (900000002, 'editor-next', 'editor-next', 'unused', 'active', 'user', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+$editorInput = ['app' => 'test', 'id' => 'editor/1', 'osmid' => 'node/950', 'name' => 'Edited item', 'updated_by_userid' => 'spoofed'];
+$editorCreated = $service->create($editorInput, false, 900000001);
+$check($editorCreated['updated_by_userid'] === 'editor-first', 'Creation must return the authenticated editor userid, ignoring input');
+$editorUpdated = $service->update('editor/1', $editorInput, false, 900000002);
+$check($editorUpdated['updated_by_userid'] === 'editor-next', 'Update must return the latest editor rather than the creator');
+$repoRow = $repo->find('test', 'editor/1');
+$check(!array_key_exists('updated_by_userid', $repoRow['data']), 'Editor userid is server metadata, not writable JSON');
+$check($service->find('test', 'editor/1')['updated_by_userid'] === 'editor-next', 'Individual GET must resolve editor');
+$check($service->list('test', 'node/950', ['summary' => '1'])[0]['updated_by_userid'] === 'editor-next', 'Summary must include editor');
+$check($service->listSelected('test', ['osmids' => 'node/950'])[0]['updated_by_userid'] === 'editor-next', 'Candidate selection must include editor');
+$bboxEditors = array_column($service->listSelected('test', ['bbox' => '135,35,135.5,35.5']), 'updated_by_userid', 'id');
+$check($bboxEditors['editor/1'] === 'editor-next', 'BBOX union must include unlocated editor metadata');
+$pdo->exec("UPDATE users SET userid='editor-renamed' WHERE id=900000002");
+$check($service->find('test', 'editor/1')['updated_by_userid'] === 'editor-renamed', 'Userid must resolve the current account value');
+$pdo->exec('DELETE FROM users WHERE id=900000002');
+$check($service->find('test', 'editor/1')['updated_by_userid'] === null, 'Missing editor account must return null without dropping the activity');
+$check($service->list('test', 'node/900')[0]['updated_by_userid'] === null, 'Legacy unrecorded editor must return null');
+echo "Activity editor metadata tests passed.\n";

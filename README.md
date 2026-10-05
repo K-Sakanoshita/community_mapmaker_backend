@@ -73,6 +73,8 @@ curl --get 'http://127.0.0.1:18080/api/activities.php' \
   --data-urlencode 'summary=1'
 ```
 
+Activityの応答には、最終編集者のログイン用ユーザーIDを`updated_by_userid`として返します。通常取得・`summary=1`・CSVに共通で、編集者が未記録またはユーザーが削除済みの場合は`null`（CSVでは空欄）です。詳しくは[応答フィールド](docs/api-reference.md#activityの応答フィールド)を参照してください。
+
 [API一覧](docs/api-reference.md#エンドポイント一覧)から、Activity、Project、ユーザー管理、認証の各仕様へ移動できます。
 
 ## セキュリティと運用
