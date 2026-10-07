@@ -45,6 +45,8 @@ return [
         ],
     ],
     'mail' => [
+        // Also used as the envelope sender (bounce address). Authorize the
+        // sending server in this domain's SPF, or configure aligned DKIM.
         'from_address' => 'noreply@example.jp',
         'from_name' => 'Community Map Maker',
         'site_name' => 'Community Map Maker',

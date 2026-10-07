@@ -7,7 +7,23 @@ use RuntimeException;
 
 final class ProjectAccessService
 {
-    private const WRITE_ROLES = ['editor', 'project_admin'];
+    private const WRITE_ROLES = ['contributor', 'editor', 'project_admin'];
+
+    public function assertCanUseConsole(array $user): void
+    {
+        if (!in_array($user['role'] ?? 'user', ['user', 'admin'], true)) {
+            throw new ProjectAccessDeniedException('Console access is not permitted.');
+        }
+    }
+
+    public function assertCanUseSpreadsheet(array $user, string $appKey): void
+    {
+        $this->assertCanUseConsole($user);
+        if (($user['role'] ?? 'user') === 'admin') return;
+        if (!in_array($this->projects->roleForUser((int)$user['id'], $appKey), ['viewer', 'editor', 'project_admin'], true)) {
+            throw new ProjectAccessDeniedException('Spreadsheet access is not permitted.');
+        }
+    }
 
     public function __construct(private ProjectAccessRepositoryInterface $projects)
     {
@@ -29,6 +45,13 @@ final class ProjectAccessService
         return $visible;
     }
 
+    public function visibleConsoleProjects(array $user, array $projects): array
+    {
+        $this->assertCanUseConsole($user);
+        return array_values(array_filter($this->visibleProjects($user, $projects),
+            static fn(array $project): bool => $project['access_role'] !== 'contributor'));
+    }
+
     public function assignCreatedProject(array $user, array $project): void
     {
         $this->projects->assignProject((int)$user['id'], (int)$project['id'], 'project_admin');
@@ -36,6 +59,7 @@ final class ProjectAccessService
 
     public function assertCanManage(array $user, string $appKey): void
     {
+        $this->assertCanUseConsole($user);
         if (($user['role'] ?? 'user') === 'admin') return;
         if ($this->projects->roleForUser((int)$user['id'], $appKey) !== 'project_admin') {
             throw new ProjectAccessDeniedException('Project administration is not permitted.');

@@ -16,7 +16,10 @@ final class ActivityApi
         $credentials = Http::basicCredentials();
         if ($credentials === null) {
             $user = \CommunityMapMaker\Auth\ConsoleSession::user($container);
-            if ($user !== null) return $user;
+            if ($user !== null) {
+                $container['project_access']->assertCanUseConsole($user);
+                return $user;
+            }
             self::unauthorized();
         }
         try {
@@ -25,13 +28,16 @@ final class ActivityApi
             $user = null;
         }
         if ($user === null) self::unauthorized();
+        if (($_SERVER['HTTP_X_CONSOLE_SESSION'] ?? '') === '1') {
+            $container['project_access']->assertCanUseConsole($user);
+        }
         return $user;
     }
 
     public static function requireWriteAccess(array $container, string $appKey): ?array
     {
         $appConfig = $container['activity_schema']->appConfig($appKey);
-        if (($appConfig['write_auth_required'] ?? true) !== true) return null;
+        if (($appConfig['write_auth_required'] ?? true) !== true && ($_SERVER['HTTP_X_CONSOLE_SESSION'] ?? '') !== '1') return null;
         return self::requireProjectWriteAccess($container, $appKey);
     }
 
@@ -40,6 +46,9 @@ final class ActivityApi
         $container['activity_schema']->appConfig($appKey);
         $user = self::requireAuthentication($container);
         $container['project_access']->assertCanWrite($user, $appKey);
+        if (($_SERVER['HTTP_X_CONSOLE_SESSION'] ?? '') === '1') {
+            $container['project_access']->assertCanUseSpreadsheet($user, $appKey);
+        }
         return $user;
     }
 

@@ -18,10 +18,11 @@ ActivityApi::run(function () use ($container): array {
         return [200, ['status' => 'ok']];
     }
     $user = ActivityApi::requireAuthentication($container);
+    $container['project_access']->assertCanUseConsole($user);
     if ($method === 'POST') {
         \CommunityMapMaker\Auth\ConsoleSession::establish($container['user_repo']->findById((int)$user['id']));
     }
-    $projects = $container['project_repo']->withActivityCounts($container['project_access']->visibleProjects(
+    $projects = $container['project_repo']->withActivityCounts($container['project_access']->visibleConsoleProjects(
         $user,
         $container['project_service']->list()
     ));

@@ -17,7 +17,10 @@ final class NativeMailer implements Mailer
         $this->fromAddress = trim((string)($config['from_address'] ?? ''));
         $this->fromName = $this->singleLine((string)($config['from_name'] ?? 'Community Map Maker'));
         $this->siteName = $this->singleLine((string)($config['site_name'] ?? 'Community Map Maker'));
-        if (!filter_var($this->fromAddress, FILTER_VALIDATE_EMAIL)) {
+        // The configured address is also passed to sendmail's -f option. Only
+        // accept unquoted addresses without shell syntax or extra arguments.
+        if (!filter_var($this->fromAddress, FILTER_VALIDATE_EMAIL)
+            || preg_match('/\A[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\z/', $this->fromAddress) !== 1) {
             throw new InvalidArgumentException('mail.from_address is invalid.');
         }
     }
@@ -66,10 +69,11 @@ final class NativeMailer implements Mailer
         if (!filter_var($recipient, FILTER_VALIDATE_EMAIL)) return false;
         $headers = [
             'From: ' . sprintf('%s <%s>', mb_encode_mimeheader($this->fromName), $this->fromAddress),
+            'MIME-Version: 1.0',
             'Content-Type: text/plain; charset=UTF-8',
             'Content-Transfer-Encoding: 8bit',
         ];
-        return mail($recipient, mb_encode_mimeheader($subject), $body, implode("\r\n", $headers));
+        return mail($recipient, mb_encode_mimeheader($subject), $body, implode("\r\n", $headers), '-f' . $this->fromAddress);
     }
 
     private function singleLine(string $value): string

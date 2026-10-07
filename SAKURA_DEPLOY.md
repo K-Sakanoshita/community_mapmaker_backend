@@ -64,6 +64,10 @@ vi config/config.php
 - `mail.from_address`
 - `mail.from_name`
 
+`mail.from_address` は表示上のFromと、sendmailの`-f`で指定する実際の送信元（エラー返送先）の両方に使用します。受信可能なアドレスを設定し、そのドメインの既存SPFレコードで実際の送信サーバーを許可してください。独自ドメインのFromを使っていても、さくらのサーバーがSPFで許可されておらずDKIM署名もなければ、Gmailなどで拒否・迷惑メール判定される可能性があります。SPFレコードは既存の送信元を残して更新し、複数の`v=spf1`レコードを作らないでください。DKIMを利用する場合はFromと同じドメインで署名される設定も確認します。
+
+`mail()`の成功は配送受付を示し、宛先への到着を保証しません。反映後は確認メールを再送し、受信メールの`Return-Path`が設定アドレス、`Authentication-Results`が`spf=pass`および`dmarc=pass`になっていることを確認してください。未着時は返送先のエラーメールと送信サーバーのログを確認します。設定変更前のメールは旧返送先にエラーが戻る場合があります。
+
 `auth.password_reset_url` は、同梱の `reset-password.html` の公開 URL を指定します。既定の配置先なら次の形式です。
 
 ```php

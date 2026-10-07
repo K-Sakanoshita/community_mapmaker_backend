@@ -135,7 +135,7 @@
         <label class="search">ユーザーID・メール<input class="form-control" id="usersSearch" type="search" placeholder="検索"></label>
         <label>状態<select class="form-select" id="userStatusFilter"><option value="">すべて</option><option value="pending">pending</option><option value="active">active</option><option value="disabled">disabled</option></select></label>
         <label>メール確認<select class="form-select" id="userVerifiedFilter"><option value="">すべて</option><option value="yes">確認済み</option><option value="no">未確認</option></select></label>
-        <label>ロール<select class="form-select" id="userRoleFilter"><option value="">すべて</option><option value="user">user</option><option value="admin">admin</option></select></label>
+        <label>ロール<select class="form-select" id="userRoleFilter"><option value="">すべて</option><option value="user">user</option><option value="contributor">contributor</option><option value="admin">admin</option></select></label>
         <label>プロジェクト<select class="form-select" id="userProjectFilter"><option value="">すべて</option></select></label>
         <button class="btn btn-outline-secondary" id="usersLoadButton" type="button">検索</button>
       </div>
@@ -182,7 +182,7 @@
         <label class="form-group mb-3">初期パスワード <span class="text-danger">必須・8文字以上</span><input class="form-control" id="newUserPassword" type="password" minlength="8" maxlength="4096" autocomplete="new-password"></label>
         <label class="form-group mb-3">初期パスワード（確認） <span class="text-danger">必須</span><input class="form-control" id="newUserPasswordConfirmation" type="password" minlength="8" maxlength="4096" autocomplete="new-password"></label>
       </div>
-      <label class="form-group mb-3">ロール<select class="form-select" id="newUserRole"><option value="user">user</option><option value="admin">admin</option></select></label>
+      <label class="form-group mb-3">ロール<select class="form-select" id="newUserRole"><option value="user">user</option><option value="contributor">contributor</option><option value="admin">admin</option></select></label>
       <fieldset><legend>利用プロジェクト</legend><div id="newUserProjects" class="project-assignments"></div></fieldset>
       <div class="d-flex justify-content-end gap-2 mt-3"><button class="btn btn-outline-secondary" type="button" data-close-dialog="newUserDialog">キャンセル</button><button class="btn btn-success" id="newUserSubmitButton" value="create">追加</button></div>
     </form>
@@ -194,7 +194,7 @@
       <dl id="userMetadata" class="detail-grid"></dl>
       <div class="user-edit-grid">
         <label class="form-group mb-3">状態<select class="form-select" id="editUserStatus"><option value="pending">pending</option><option value="active">active</option><option value="disabled">disabled</option></select></label>
-        <label class="form-group mb-3">ロール<select class="form-select" id="editUserRole"><option value="user">user</option><option value="admin">admin</option></select></label>
+        <label class="form-group mb-3">ロール<select class="form-select" id="editUserRole"><option value="user">user</option><option value="contributor">contributor</option><option value="admin">admin</option></select></label>
       </div>
       <section class="user-detail-section"><h3>利用プロジェクト</h3><div id="editUserProjects" class="project-assignments"></div></section>
       <section id="userAddEmailSection" class="user-detail-section" hidden>
@@ -239,6 +239,6 @@
   </dialog>
   <script src="https://unpkg.com/tabulator-tables@6.5.2/dist/js/tabulator.min.js" integrity="sha384-ZlfxHB5fIn8MOAuKJe8YBMi7snQXYvhy+0b3K4rGBBY2UvrJwho2jciJ5NKt0WtC" crossorigin="anonymous" defer></script>
   <script src="i18n.js?v=20261003-activity-count" defer></script>
-  <script src="admin.js?v=20261003-activity-count" defer></script>
+  <script src="admin.js?v=20261007-jst" defer></script>
 </body>
 </html>

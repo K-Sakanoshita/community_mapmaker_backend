@@ -13,6 +13,10 @@ $method = Http::requireMethods(['GET', 'POST', 'PUT', 'DELETE']);
 if ($method === 'GET') {
     ActivityApi::run(function () use ($container): array {
         $appKey = ActivityApi::appKey();
+        if (($_SERVER['HTTP_X_CONSOLE_SESSION'] ?? '') === '1') {
+            $user = ActivityApi::requireAuthentication($container);
+            $container['project_access']->assertCanUseSpreadsheet($user, $appKey);
+        }
         $activityKey = ActivityApi::optionalActivityKey();
         if ($activityKey !== null) {
             foreach (['updated_since', 'limit', 'summary'] as $parameter) {

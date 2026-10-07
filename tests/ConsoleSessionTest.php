@@ -18,6 +18,15 @@ $_COOKIE['cmm_console'] = session_id();
 checkSession(session_get_cookie_params()['lifetime'] === 0, 'Must use a browser session cookie.');
 checkSession(session_get_cookie_params()['httponly'], 'Cookie must be HttpOnly.');
 checkSession(ConsoleSession::user($container)['id'] === 1, 'A subsequent request must restore the user.');
+$repo->user['role'] = 'contributor';
+checkSession(ConsoleSession::user($container) === null, 'Changing to contributor must revoke an existing console session.');
+try {
+    ConsoleSession::establish($repo->user);
+    throw new LogicException('Contributor must not establish a console session.');
+} catch (RuntimeException $error) {
+    checkSession($error->getMessage() === 'Console access is not permitted.', 'Contributor sessions must be rejected explicitly.');
+}
+$repo->user['role'] = 'admin';
 unset($_SERVER['HTTP_X_CONSOLE_SESSION']);
 checkSession(ConsoleSession::user($container) === null, 'Requests without the CSRF guard must be rejected.');
 $_SERVER['HTTP_X_CONSOLE_SESSION'] = '1';

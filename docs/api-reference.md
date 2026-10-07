@@ -44,8 +44,11 @@
 | 管理画面セッション | 同一OriginのHttpOnly Cookie。管理画面のリクエストには`X-Console-Session: 1`を付ける |
 | `admin` | 全体管理者。全Projectの管理・書き込み、ユーザー管理、importが可能 |
 | `project_admin` | 割り当てProjectの設定・Schema変更とActivityの書き込みが可能 |
+| `contributor` | アカウント権限では管理画面・Project作成を禁止。Project権限では割り当てProjectのActivity書き込みを許可し、管理画面の表は利用不可 |
 | `editor` | 割り当てProjectのActivityの書き込みが可能 |
 | `viewer` | 割り当てProjectの閲覧のみ |
+
+公開登録のアカウント権限は常に`contributor`です。入力で`role`を指定しても昇格できません。アカウントの`contributor`は既存の`editor`割り当てがあっても管理画面セッションを作成できません。アプリのHTTP Basic認証によるActivity書き込みにはProjectの`contributor` / `editor` / `project_admin`割り当てが必要です。公開Activity参照APIの公開範囲は変わりません。
 
 `pending`・`disabled`ユーザーは認証できません。Projectの削除は`admin`、または作成者本人かつ`project_admin`に限ります。割り当てのないユーザーは書き込みできません。
 
@@ -322,7 +325,7 @@ CookieはHttpOnly・SameSite=Strict・有効期限なしです。通常はブラ
 | `search` | ユーザーID・メールの検索。最大255文字 |
 | `status` | `pending` / `active` / `disabled` |
 | `verified` | `yes` / `no` |
-| `role` | `user` / `admin` |
+| `role` | `contributor` / `user` / `admin` |
 | `project_id` | 正のProject内部ID |
 
 `pagination`は`page`, `per_page`, `total`, `total_pages`です。詳細にはProject割り当て、Activity投稿件数・最近の投稿などを含みます。削除済みActivityは投稿件数と最近の投稿から除外します。
@@ -339,7 +342,7 @@ CookieはHttpOnly・SameSite=Strict・有効期限なしです。通常はブラ
 | POST `send_password_reset` | `id` | 再設定メール送信 |
 | POST `set_password` | `id`, `password`, `password_confirmation` | 状態を変えずパスワード再設定。`status`と`user`を返す |
 
-`projects`は`[{"project_id":1,"role":"editor"}]`形式です。roleは`viewer` / `editor` / `project_admin`。PUTで省略すると現在値を保持し、空配列で割り当てを解除します。
+`projects`は`[{"project_id":1,"role":"editor"}]`形式です。roleは`viewer` / `contributor` / `editor` / `project_admin`。PUTで省略すると現在値を保持し、空配列で割り当てを解除します。
 
 状態・権限・メール・パスワード操作は監査ログへ記録します。最後の`active admin`は無効化・降格できません。初期パスワード・ハッシュ・トークンは応答にも監査ログにも含めません。
 
@@ -355,6 +358,7 @@ CookieはHttpOnly・SameSite=Strict・有効期限なしです。通常はブラ
 
 | メソッド・パス | 必須入力 | 成功応答 |
 | --- | --- | --- |
+| GET `auth/registration-projects.php` | なし | 200、`projects`（登録対象の公開Projectの`app_key`, `project_name`） |
 | POST `auth/register.php` | `userid`, `email`, `password`, `password_confirmation` | 201、`status: "ok"`, `verification_required`, `verification_email_sent` |
 | POST `auth/resend-verification.php` | `identity`（ユーザーIDまたはメール） | 202、`status: "ok"`, `accepted`, `verification_email_sent` |
 | GET `auth/verify.php` | クエリ`token` | 200、`{"status":"ok","email_verified":true}` |
@@ -370,7 +374,9 @@ CookieはHttpOnly・SameSite=Strict・有効期限なしです。通常はブラ
 }
 ```
 
-- 登録時のroleは通常の`user`。メール確認必須なら`pending`、任意なら`active`です。確認後にProjectを作成でき、他の既存Projectへの参加は管理者の割り当てが必要です。
+- 登録時のroleは`contributor`（投稿者）。メール確認必須なら`pending`、任意なら`active`です。アプリから投稿・編集できますが、管理画面やスプレッドシートは利用できません。
+- 任意の`app_key`を送ると、そのProjectへ`contributor`として自動参加します。対象は有効・未削除・`frontend_public: true`のProjectだけです。対象外の指定は422となりアカウントを作りません。アカウント作成と参加設定は同一トランザクションで行います。`app_key`を省略した場合は参加Projectなしで登録します。
+- 登録画面のURLに`register.html?app_key=playgrounds`のようにProject識別子を指定すると参加先が初期選択されます。画面で参加先を変更でき、選択値が登録APIへ送られます。URL引数なしでも公開Projectを選択できます。アカウントやProjectのroleを登録リクエストで昇格することはできません。
 - パスワードは既定8文字以上・最大4096バイト。`auth.password_min_length`で最小文字数を設定できます（下限8）。登録・管理者作成・再設定に共通です。
 - 再設定要求はアカウントの存在有無にかかわらず同じ受付メッセージを返します。登録・確認メール再送・再設定要求にはRate Limitがあります。
 - 公開登録成功時は、メールを持つ有効な管理者へ通知します。通知失敗は登録を取り消しません。通知にはパスワード・トークンを含めず、管理者招待・確認メール再送は通知対象外です。

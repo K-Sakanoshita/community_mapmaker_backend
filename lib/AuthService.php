@@ -20,7 +20,9 @@ final class AuthService
         private RateLimiterInterface $rateLimiter,
         private TransactionManagerInterface $transactions,
         private Mailer $mailer,
-        private array $config
+        private array $config,
+        private ?\CommunityMapMaker\Activity\ProjectRepositoryInterface $projects = null,
+        private ?ProjectAccessRepositoryInterface $projectAccess = null
     ) {
     }
 
@@ -33,6 +35,9 @@ final class AuthService
         [$userid, $useridNormalized] = $this->validateUserid($input['userid'] ?? null);
         [$email, $emailNormalized] = $this->validateEmail($input['email'] ?? null);
         $password = $this->validatePassword($input['password'] ?? null, $input['password_confirmation'] ?? null);
+        $appKey = $input['app_key'] ?? '';
+        if (!is_string($appKey)) throw new ValidationException(['app_key' => 'A project key is required.']);
+        $appKey = trim($appKey);
 
         $this->enforceLimit('register_client', 'client:' . $clientIdentifier);
         $this->enforceLimit('register_email', 'email:' . $emailNormalized);
@@ -44,8 +49,19 @@ final class AuthService
         if ($passwordHash === false) throw new RuntimeException('Password hashing failed.');
 
         $tokenData = null;
-        $user = $this->transactions->run(function () use ($userid, $useridNormalized, $email, $emailNormalized, $passwordHash, $status, $requiresVerification, &$tokenData): array {
-            $created = $this->users->create($userid, $useridNormalized, $email, $emailNormalized, $passwordHash, $status);
+        $user = $this->transactions->run(function () use ($userid, $useridNormalized, $email, $emailNormalized, $passwordHash, $status, $requiresVerification, $appKey, &$tokenData): array {
+            $project = null;
+            if ($appKey !== '') {
+                $project = $this->projects?->find($appKey);
+                if ($project === null || !$project['enabled'] || !($project['frontend_public'] ?? false)
+                    || ($project['is_deleted'] ?? false) || $this->projectAccess === null) {
+                    throw new ValidationException(['app_key' => 'This project does not accept public registration.']);
+                }
+            }
+            $created = $this->users->create($userid, $useridNormalized, $email, $emailNormalized, $passwordHash, $status, 'contributor');
+            if ($project !== null) {
+                $this->projectAccess->assignProject((int)$created['id'], (int)$project['id'], 'contributor');
+            }
             if ($requiresVerification) {
                 $tokenData = $this->issueToken((int)$created['id'], self::VERIFY_EMAIL, $this->verificationTtl());
             }
@@ -329,8 +345,8 @@ final class AuthService
     private function validateRole(mixed $value): string
     {
         $role = trim((string)$value);
-        if (!in_array($role, ['user', 'admin'], true)) {
-            throw new ValidationException(['role' => 'Role must be user or admin.']);
+        if (!in_array($role, ['contributor', 'user', 'admin'], true)) {
+            throw new ValidationException(['role' => 'Role must be contributor, user, or admin.']);
         }
         return $role;
     }

@@ -51,17 +51,20 @@ try {
     Http::prepare($authConfig);
     $database = new Database((array)($config['db'] ?? []));
     $userRepo = new UserRepository($database->pdo());
+    $projectRepo = new ProjectRepository($database->pdo());
+    $adminUserRepo = new AdminUserRepository($database->pdo());
     $authService = new AuthService(
         $userRepo,
         new TokenRepository($database->pdo()),
         new RateLimiter($database->pdo(), (string)($authConfig['rate_limit_secret'] ?? '')),
         $database,
         new NativeMailer((array)($config['mail'] ?? [])),
-        $authConfig
+        $authConfig,
+        $projectRepo,
+        $adminUserRepo
     );
 
     $activityConfig = (array)($config['activity'] ?? []);
-    $projectRepo = new ProjectRepository($database->pdo());
     $activitySchema = new ActivitySchema((array)($activityConfig['apps'] ?? []), $projectRepo);
     $activityRepo = new ActivityRepository($database->pdo());
     $activityService = new ActivityService(
@@ -73,7 +76,6 @@ try {
         $projectRepo,
         $activitySchema
     );
-    $adminUserRepo = new AdminUserRepository($database->pdo());
     $auditLogs = new AuditLogRepository($database->pdo());
     $adminUsers = new AdminUserService($adminUserRepo, $authService, $auditLogs, $database);
     $projectAccess = new ProjectAccessService($adminUserRepo);

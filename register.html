@@ -10,11 +10,12 @@
     main { width: min(100%, 440px); padding: 30px; box-sizing: border-box; border-radius: 12px; background: #fff; box-shadow: 0 10px 35px #173f321a; }
     h1 { margin: 0 0 8px; font-size: 1.7rem; } p { line-height: 1.55; }
     label { display: block; margin: 17px 0 0; font-weight: 700; font-size: .9rem; }
-    input { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 11px; border: 1px solid #8ea69a; border-radius: 6px; font: inherit; }
+    input, select { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 11px; border: 1px solid #8ea69a; border-radius: 6px; font: inherit; }
     button { width: 100%; margin-top: 23px; padding: 12px; border: 0; border-radius: 6px; background: #16794e; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
     button:disabled { opacity: .55; cursor: wait; } a { color: #126d49; }
     .hint { color: #52675d; font-size: .85rem; } .error { color: #a21f1f; } .success { color: #11633d; }
     #status { min-height: 1.5em; } .links { margin-top: 22px; text-align: center; }
+    details { margin-top: 20px; } summary { cursor: pointer; color: #126d49; }
   </style>
 </head>
 <body>
@@ -22,31 +23,73 @@
   <h1>ユーザー登録</h1>
   <p>ユーザー登録にはメール認証が必要です。</p>
   <form id="registerForm">
+    <label>参加プロジェクト<select id="registrationProject" name="app_key" disabled><option value="">読み込み中…</option></select></label>
     <label>ユーザーID<input name="userid" autocomplete="username" minlength="3" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,63}" required></label>
     <p class="hint">英数字で始まる3〜64文字。英数字、ピリオド、アンダースコア、ハイフンを使えます。</p>
     <label>メールアドレス<input name="email" type="email" autocomplete="email" maxlength="255" required></label>
     <label>パスワード<input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
     <p class="hint">8文字以上で設定してください。</p>
     <label>パスワード（確認）<input name="password_confirmation" type="password" autocomplete="new-password" minlength="8" required></label>
-    <button type="submit">登録して確認メールを送る</button>
+    <button type="submit" disabled>登録して確認メールを送る</button>
   </form>
   <p id="status" role="status" aria-live="polite"></p>
-  <form id="resendForm" hidden>
+  <details id="resendSection">
+    <summary>確認メールが届かない方</summary>
+  <form id="resendForm">
     <p>届かない場合は迷惑メールフォルダを確認し、時間をおいて再送してください。</p>
+    <label>登録したメールアドレス<input id="resendEmail" name="email" type="email" autocomplete="email" maxlength="255" required></label>
     <button type="submit">確認メールを再送</button>
   </form>
-  <p class="links"><a href="admin/">ログイン画面へ戻る</a></p>
+  </details>
+  <p class="links"><a href="./">ポータルへ戻る</a></p>
 </main>
 <script>
 'use strict';
 const registerForm = document.getElementById('registerForm');
 const resendForm = document.getElementById('resendForm');
+const resendSection = document.getElementById('resendSection');
+const resendEmail = document.getElementById('resendEmail');
 const statusText = document.getElementById('status');
-let registeredEmail = '';
+const registrationAppKey = new URLSearchParams(location.search).get('app_key') || '';
+const registrationProject = document.getElementById('registrationProject');
+let projectsReady = false;
+async function loadRegistrationProjects() {
+  try {
+    const response = await fetch('auth/registration-projects.php', { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error('Project list unavailable');
+    const data = await response.json();
+    if (!Array.isArray(data.projects)) throw new Error('Invalid project list');
+    registrationProject.replaceChildren(new Option('参加しない（後から管理者が追加できます）', ''));
+    for (const project of data.projects) {
+      registrationProject.add(new Option(project.project_name, project.app_key));
+    }
+    if (registrationAppKey) {
+      if (data.projects.some(project => project.app_key === registrationAppKey)) {
+        registrationProject.value = registrationAppKey;
+      } else {
+        const unavailable = new Option('指定されたプロジェクトには参加できません', registrationAppKey);
+        unavailable.disabled = true;
+        registrationProject.add(unavailable);
+        registrationProject.value = registrationAppKey;
+        showStatus('指定されたプロジェクトは登録対象外です。参加先を選び直してください。', true);
+      }
+    }
+    projectsReady = true;
+    registrationProject.disabled = false;
+    registerForm.querySelector('button').disabled = false;
+  } catch (error) {
+    showStatus('参加プロジェクトを読み込めませんでした。ページを再読み込みしてください。', true);
+  }
+}
+loadRegistrationProjects();
 async function post(path, body) {
   const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(body) });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.code || `HTTP ${response.status}`);
+  if (!response.ok) {
+    const error = new Error(data.code || `HTTP ${response.status}`);
+    error.errors = data.errors;
+    throw error;
+  }
   return data;
 }
 function showStatus(message, error = false) {
@@ -55,6 +98,10 @@ function showStatus(message, error = false) {
 }
 registerForm.addEventListener('submit', async event => {
   event.preventDefault();
+  if (!projectsReady || registrationProject.selectedOptions[0]?.disabled) {
+    showStatus('参加プロジェクトを選択してください。', true);
+    return;
+  }
   const fields = Object.fromEntries(new FormData(registerForm));
   if (fields.password !== fields.password_confirmation) { showStatus('確認用パスワードが一致しません。', true); return; }
   const button = registerForm.querySelector('button');
@@ -62,16 +109,24 @@ registerForm.addEventListener('submit', async event => {
   showStatus('登録中…');
   try {
     const result = await post('auth/register.php', fields);
-    registeredEmail = fields.email;
+    resendEmail.value = fields.email;
     registerForm.hidden = true;
     if (result.verification_required) {
       showStatus(result.verification_email_sent ? '確認メールを送信しました。メール内のリンクを開いてください。' : '登録は受け付けましたが、メールを送信できませんでした。再送をお試しください。', !result.verification_email_sent);
-      resendForm.hidden = false;
+      resendSection.open = true;
     } else {
-      showStatus('登録が完了しました。ログインしてください。');
+      showStatus('登録が完了しました。利用するアプリからログインしてください。');
     }
   } catch (error) {
-    const messages = { identity_already_registered: 'ユーザーIDまたはメールアドレスを使用できません。別のものを入力するか、ログインをお試しください。', rate_limit_exceeded: '操作が多すぎます。しばらく待ってから再度お試しください。', validation_failed: '入力内容を確認してください。', registration_disabled: '現在、ユーザー登録を受け付けていません。' };
+    if (error.message === 'validation_failed' && error.errors?.app_key) {
+      showStatus('このプロジェクトからは登録できません。利用するアプリの登録リンクを確認してください。', true);
+      return;
+    }
+    if (error.message === 'identity_already_registered') {
+      resendEmail.value = fields.email;
+      resendSection.open = true;
+    }
+    const messages = { identity_already_registered: 'ユーザーIDまたはメールアドレスは既に登録されています。メール確認がまだの場合は、下の欄から確認メールを再送してください。', rate_limit_exceeded: '操作が多すぎます。しばらく待ってから再度お試しください。', validation_failed: '入力内容を確認してください。', registration_disabled: '現在、ユーザー登録を受け付けていません。' };
     showStatus(messages[error.message] || '登録できませんでした。しばらくしてから再度お試しください。', true);
   } finally { button.disabled = false; }
 });
@@ -80,8 +135,8 @@ resendForm.addEventListener('submit', async event => {
   const button = resendForm.querySelector('button');
   button.disabled = true;
   try {
-    await post('auth/resend-verification.php', { identity: registeredEmail });
-    showStatus('再送を受け付けました。メールをご確認ください。');
+    const result = await post('auth/resend-verification.php', { identity: resendEmail.value.trim() });
+    showStatus(result.verification_email_sent ? '再送を受け付けました。未確認の登録がある場合は、確認メールが届きます。' : 'メールを送信できませんでした。時間をおいて再送してください。', !result.verification_email_sent);
   } catch (error) {
     showStatus(error.message === 'rate_limit_exceeded' ? '再送まで少しお待ちください。' : '再送できませんでした。時間をおいてお試しください。', true);
   } finally { button.disabled = false; }

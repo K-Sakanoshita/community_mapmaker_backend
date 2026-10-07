@@ -13,7 +13,7 @@ $html = (string)ob_get_clean();
 checkEnglishAdmin(str_contains($html, '<html lang="en">'), 'English page language is missing.');
 checkEnglishAdmin(str_contains($html, '<base href="../../admin/">'), 'Shared asset base is missing.');
 checkEnglishAdmin(str_contains($html, 'i18n.js?v=20261003-activity-count'), 'Message loader is missing.');
-checkEnglishAdmin(str_contains($html, 'admin.js?v=20261003-activity-count'), 'Shared script is missing.');
+checkEnglishAdmin(str_contains($html, 'admin.js?v=20261007-jst'), 'Shared script is missing.');
 checkEnglishAdmin(str_contains($html, 'Project Management'), 'English page text is missing.');
 checkEnglishAdmin(str_contains($html, 'id="columnsBackButton"') && str_contains($html, 'id="activitiesBackButton"') && str_contains($html, 'Back to projects'), 'Project list return buttons are missing.');
 checkEnglishAdmin(!preg_match('/[ぁ-んァ-ン一-龥]/u', $html), 'Japanese interface text remains in English HTML.');

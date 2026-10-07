@@ -17,6 +17,7 @@ final class ProjectRepository implements ProjectRepositoryInterface
     public function list(bool $onlyEnabled = false): array
     {
         $sql = 'SELECT id, app_key, project_name, frontend_url, frontend_public, schema_json, enabled, created_by_user_id, created_at, updated_at FROM projects WHERE is_deleted = 0';
+        if ($onlyEnabled) $sql .= ' AND enabled = 1';
         $sql .= ' ORDER BY updated_at DESC, id DESC';
         $statement = $this->pdo->query($sql);
         return array_map(fn(array $row): array => $this->decode($row), $statement->fetchAll());
@@ -173,7 +174,7 @@ final class ProjectRepository implements ProjectRepositoryInterface
             throw new RuntimeException('Stored schema JSON is invalid.', 0, $error);
         }
         $row['schema'] = is_array($data) ? $data : [];
-        $row['enabled'] = true;
+        $row['enabled'] = (bool)$row['enabled'];
         $row['is_deleted'] = (bool)($row['is_deleted'] ?? false);
         $row['frontend_url'] = $row['frontend_url'] === null ? null : (string)$row['frontend_url'];
         $row['frontend_public'] = (bool)$row['frontend_public'];

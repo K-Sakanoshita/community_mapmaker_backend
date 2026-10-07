@@ -235,4 +235,16 @@ adminAssert(
     'Important actions must be audited without password hashes or tokens.'
 );
 
+$contributor = $service->create([
+    'userid' => 'app-contributor', 'password' => 'contributor password',
+    'password_confirmation' => 'contributor password', 'role' => 'contributor',
+    'projects' => [['project_id' => 10, 'role' => 'contributor']],
+], (int)$admin['id'], '127.0.0.1');
+adminAssert($contributor['role'] === 'contributor' && $contributor['projects'][0]['role'] === 'contributor', 'Admins must be able to create app-only contributors and assign contributor projects.');
+$service->list(['role' => 'contributor']);
+$contributor = $service->update((int)$contributor['id'], ['role' => 'user'], (int)$admin['id']);
+adminAssert($contributor['role'] === 'user', 'Admins must be able to grant console access explicitly.');
+$contributor = $service->update((int)$contributor['id'], ['role' => 'contributor'], (int)$admin['id']);
+adminAssert($contributor['role'] === 'contributor', 'Admins must be able to revoke console access.');
+
 echo "Admin user behavior: ok\n";

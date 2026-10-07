@@ -207,9 +207,11 @@ $service = new AuthService($users, $tokens, $limits, new ImmediateTransactions()
 
 $registration = $service->register([
     'userid' => 'Test.User', 'email' => 'Test.User@Example.JP',
+    'role' => 'admin',
     'password' => 'correct horse battery staple', 'password_confirmation' => 'correct horse battery staple',
 ], '192.0.2.1');
 assertTrue($registration['status'] === 'pending', 'Registration must create a pending user.');
+assertTrue($users->rows[1]['role'] === 'contributor', 'Self-registration must create an app-only contributor.');
 assertTrue($registration['verification_email_sent'] === true, 'Registration must report successful delivery.');
 assertTrue($users->rows[1]['userid_normalized'] === 'test.user', 'User ID must be normalized.');
 assertTrue($users->rows[1]['email_normalized'] === 'test.user@example.jp', 'Email must be normalized.');
@@ -273,6 +275,7 @@ $directResult = $directService->register([
     'password' => 'correct horse battery staple', 'password_confirmation' => 'correct horse battery staple',
 ], '192.0.2.10');
 assertTrue($directResult['status'] === 'active', 'Registration without required verification must create an active user.');
+assertTrue($directUsers->rows[1]['role'] === 'contributor', 'Registration without verification must also create a contributor.');
 assertTrue($directResult['verification_required'] === false, 'Optional verification must be reported.');
 assertTrue($directMailer->verification === [], 'Registration without required verification must not send verification mail.');
 assertTrue($directService->authenticate('direct-user', 'correct horse battery staple') !== null, 'Directly active user must authenticate.');

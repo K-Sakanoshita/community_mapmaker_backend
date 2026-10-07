@@ -15,7 +15,8 @@ ActivityApi::run(function () use ($container, $method): array {
     $isAdmin = ($user['role'] ?? 'user') === 'admin';
 
     if ($method === 'GET') {
-        $projects = $container['project_repo']->withActivityCounts($container['project_access']->visibleProjects(
+        $listMethod = ($_SERVER['HTTP_X_CONSOLE_SESSION'] ?? '') === '1' ? 'visibleConsoleProjects' : 'visibleProjects';
+        $projects = $container['project_repo']->withActivityCounts($container['project_access']->$listMethod(
             $user,
             $container['project_service']->list()
         ));
@@ -31,6 +32,7 @@ ActivityApi::run(function () use ($container, $method): array {
     $input = $method === 'DELETE' ? [] : Http::jsonInput($maxBytes);
 
     if ($method === 'POST') {
+        $container['project_access']->assertCanUseConsole($user);
         $created = $container['database']->run(function () use ($container, $input, $user, $isAdmin): array {
             $project = $container['project_service']->create($input, (int)$user['id']);
             if (!$isAdmin) $container['project_access']->assignCreatedProject($user, $project);

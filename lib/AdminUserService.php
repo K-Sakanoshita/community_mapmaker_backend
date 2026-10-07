@@ -8,8 +8,8 @@ use RuntimeException;
 final class AdminUserService
 {
     private const STATUSES = ['pending', 'active', 'disabled'];
-    private const ROLES = ['user', 'admin'];
-    private const PROJECT_ROLES = ['viewer', 'editor', 'project_admin'];
+    private const ROLES = ['contributor', 'user', 'admin'];
+    private const PROJECT_ROLES = ['viewer', 'contributor', 'editor', 'project_admin'];
 
     public function __construct(
         private AdminUserRepositoryInterface $users,
@@ -77,7 +77,7 @@ final class AdminUserService
         $status = array_key_exists('status', $input) ? trim((string)$input['status']) : $current['status'];
         $role = array_key_exists('role', $input) ? trim((string)$input['role']) : $current['role'];
         if (!in_array($status, self::STATUSES, true)) throw new ValidationException(['status' => 'Status must be pending, active, or disabled.']);
-        if (!in_array($role, self::ROLES, true)) throw new ValidationException(['role' => 'Role must be user or admin.']);
+        if (!in_array($role, self::ROLES, true)) throw new ValidationException(['role' => 'Role must be contributor, user, or admin.']);
         $wasActiveAdmin = $current['status'] === 'active' && $current['role'] === 'admin';
         $willBeActiveAdmin = $status === 'active' && $role === 'admin';
         $projects = array_key_exists('projects', $input) ? $this->projects($input['projects']) : null;

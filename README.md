@@ -77,6 +77,24 @@ Activityの応答には、最終編集者のログイン用ユーザーIDを`upd
 
 [API一覧](docs/api-reference.md#エンドポイント一覧)から、Activity、Project、ユーザー管理、認証の各仕様へ移動できます。
 
+## ユーザー登録と参加プロジェクト
+
+ユーザー登録画面は`register.html`です。URLの`app_key`引数で、参加プロジェクトを初期選択できます。
+
+```text
+https://armd-01.sakura.ne.jp/community-mapmaker-backend/register.html?app_key=playgrounds
+```
+
+この例では「遊具のある公園マップ」（`app_key=playgrounds`）を初期選択します。他のプロジェクトでは、`playgrounds`をそのプロジェクトの`app_key`に置き換えてください。
+
+- 登録画面の「参加プロジェクト」で参加先を選択・変更できます。URL引数なしでも選択できます。
+- 選択できるのは、DBに保存された有効・未削除・公開（`frontend_public=true`）のプロジェクトです。
+- 登録時に、選択したプロジェクトの`contributor`（投稿者）権限を付与します。メール確認後にアプリから投稿・編集できます。管理画面やスプレッドシートは利用できません。
+- 「参加しない」を選ぶと、参加プロジェクトなしで登録します。後から管理者が追加できます。
+- 対象外の`app_key`を指定した場合は、画面で参加先を選び直してください。
+
+登録APIを直接使う場合も、`POST auth/register.php`のJSONに任意の`app_key`を指定できます。詳しくは[登録・メール確認・パスワード再設定](docs/api-reference.md#登録メール確認パスワード再設定)を参照してください。
+
 ## セキュリティと運用
 
 - 公開環境ではHTTPSを使用し、CORSの許可Originを設定します。管理画面にはWebサーバー側のアクセス制御も併用します。

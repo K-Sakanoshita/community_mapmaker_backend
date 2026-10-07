@@ -136,7 +136,7 @@
         <label class="search">User ID or email<input class="form-control" id="usersSearch" type="search" placeholder="Search"></label>
         <label>Status<select class="form-select" id="userStatusFilter"><option value="">All</option><option value="pending">pending</option><option value="active">active</option><option value="disabled">disabled</option></select></label>
         <label>Email verification<select class="form-select" id="userVerifiedFilter"><option value="">All</option><option value="yes">Verified</option><option value="no">Unverified</option></select></label>
-        <label>Role<select class="form-select" id="userRoleFilter"><option value="">All</option><option value="user">user</option><option value="admin">admin</option></select></label>
+        <label>Role<select class="form-select" id="userRoleFilter"><option value="">All</option><option value="user">user</option><option value="contributor">contributor</option><option value="admin">admin</option></select></label>
         <label>Project<select class="form-select" id="userProjectFilter"><option value="">All</option></select></label>
         <button class="btn btn-outline-secondary" id="usersLoadButton" type="button">Search</button>
       </div>
@@ -183,7 +183,7 @@
         <label class="form-group mb-3">Initial password <span class="text-danger">Required, at least 8 characters</span><input class="form-control" id="newUserPassword" type="password" minlength="8" maxlength="4096" autocomplete="new-password"></label>
         <label class="form-group mb-3">Confirm initial password <span class="text-danger">Required</span><input class="form-control" id="newUserPasswordConfirmation" type="password" minlength="8" maxlength="4096" autocomplete="new-password"></label>
       </div>
-      <label class="form-group mb-3">Role<select class="form-select" id="newUserRole"><option value="user">user</option><option value="admin">admin</option></select></label>
+      <label class="form-group mb-3">Role<select class="form-select" id="newUserRole"><option value="user">user</option><option value="contributor">contributor</option><option value="admin">admin</option></select></label>
       <fieldset><legend>Assigned projects</legend><div id="newUserProjects" class="project-assignments"></div></fieldset>
       <div class="d-flex justify-content-end gap-2 mt-3"><button class="btn btn-outline-secondary" type="button" data-close-dialog="newUserDialog">Cancel</button><button class="btn btn-success" id="newUserSubmitButton" value="create">Add</button></div>
     </form>
@@ -195,7 +195,7 @@
       <dl id="userMetadata" class="detail-grid"></dl>
       <div class="user-edit-grid">
         <label class="form-group mb-3">Status<select class="form-select" id="editUserStatus"><option value="pending">pending</option><option value="active">active</option><option value="disabled">disabled</option></select></label>
-        <label class="form-group mb-3">Role<select class="form-select" id="editUserRole"><option value="user">user</option><option value="admin">admin</option></select></label>
+        <label class="form-group mb-3">Role<select class="form-select" id="editUserRole"><option value="user">user</option><option value="contributor">contributor</option><option value="admin">admin</option></select></label>
       </div>
       <section class="user-detail-section"><h3>Assigned projects</h3><div id="editUserProjects" class="project-assignments"></div></section>
       <section id="userAddEmailSection" class="user-detail-section" hidden>
@@ -240,6 +240,6 @@
   </dialog>
   <script src="https://unpkg.com/tabulator-tables@6.5.2/dist/js/tabulator.min.js" integrity="sha384-ZlfxHB5fIn8MOAuKJe8YBMi7snQXYvhy+0b3K4rGBBY2UvrJwho2jciJ5NKt0WtC" crossorigin="anonymous" defer></script>
   <script src="i18n.js?v=20261003-activity-count" defer></script>
-  <script src="admin.js?v=20261003-activity-count" defer></script>
+  <script src="admin.js?v=20261007-jst" defer></script>
 </body>
 </html>

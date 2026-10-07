@@ -967,6 +967,19 @@ async function loadUsers(resetPage = false) {
   } catch (error) { setStatus(`${t("message.1e9b249c15c2")}${error.message}`, true); }
 }
 
+function formatJapanDateTime(value) {
+  if (!value) return "-";
+  // Database timestamps are stored in UTC without a timezone suffix.
+  const date = new Date(value.replace(" ", "T") + "Z");
+  if (Number.isNaN(date.getTime())) return value;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23"
+  }).formatToParts(date);
+  const fields = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${fields.year}-${fields.month}-${fields.day} ${fields.hour}:${fields.minute}:${fields.second} JST`;
+}
+
 function renderUsers() {
   els.usersBody.replaceChildren(...state.users.map(user => {
     const tr = document.createElement("tr");
@@ -978,7 +991,7 @@ function renderUsers() {
     const statusIcon = statusIcons[user.status] || '<circle cx="12" cy="12" r="8"/>';
     tr.innerHTML = `<td><span class="user-name-actions"><button class="user-status-icon status-${escapeAttribute(user.status)}" type="button" aria-label="${escapeAttribute(user.userid)}${t("message.f2ec10125b6a")}${escapeAttribute(user.status)}${t("message.e48726ed6fbc")}${escapeAttribute(user.status)}${t("message.a73af58f19b7")}${statusIcon}</svg></button><span class="user-name">${escapeHtml(user.userid)}</span></span></td><td>${escapeHtml(user.email || "—")}</td>
       <td>${escapeHtml(user.role)}</td><td>${user.email ? (user.email_verified_at ? t("message.1f12f1d2e9de") : t("message.8ac888c7718d")) : ""}</td>
-      <td>${escapeHtml(user.last_login_at || "-")}</td><td>${user.owned_project_count}</td><td>${user.project_count}</td><td></td>`;
+      <td>${escapeHtml(formatJapanDateTime(user.last_login_at))}</td><td>${user.owned_project_count}</td><td>${user.project_count}</td><td></td>`;
     tr.querySelectorAll("td").forEach((cell, index) => {
       cell.dataset.label = [t("message.c30499da17fc"), t("message.32ed60ff9f0c"), t("message.200de0cf73dd"), t("message.dddb07c1bf41"), t("message.c993ef4c6b59"), t("message.5b8068de67f5"), t("message.ecf536eb2831"), t("message.f3ea6d345e2a")][index];
     });
@@ -1023,7 +1036,7 @@ function renderProjectAssignments(container, assignments = []) {
     const checkbox = document.createElement("input"); checkbox.type = "checkbox"; checkbox.checked = selected.has(Number(project.id));
     const label = document.createElement("label"); label.append(checkbox, document.createTextNode(`${project.project_name} (${project.app_key})`));
     const role = document.createElement("select");
-    role.append(new Option("viewer", "viewer"), new Option("editor", "editor"), new Option("project_admin", "project_admin"));
+    role.append(new Option("viewer", "viewer"), new Option("contributor", "contributor"), new Option("editor", "editor"), new Option("project_admin", "project_admin"));
     role.value = selected.get(Number(project.id)) || "editor"; role.disabled = !checkbox.checked;
     checkbox.addEventListener("change", () => { role.disabled = !checkbox.checked; updateFilter(); });
     row.append(label, role); return row;
@@ -1054,7 +1067,7 @@ function renderUserMetadata(user) {
   const metadata = [
     [t("message.c30499da17fc"), user.userid], [t("message.32ed60ff9f0c"), user.email || t("message.64bdfa48f26c")],
     ...(user.email ? [[t("message.dddb07c1bf41"), user.email_verified_at || t("message.8ac888c7718d")]] : []),
-    [t("message.66d381a4cbfe"), user.created_at], [t("message.c993ef4c6b59"), user.last_login_at || "-"],
+    [t("message.66d381a4cbfe"), user.created_at], [t("message.c993ef4c6b59"), formatJapanDateTime(user.last_login_at)],
     [t("message.f64218e0d95e"), `${user.activity_count}${t("message.04d7e6fc2cc7")}`], [t("message.371d2b828cdb"), `${user.project_count}${t("message.04d7e6fc2cc7")}`]
   ];
   els.userMetadata.replaceChildren(...metadata.flatMap(([label, value]) => {
