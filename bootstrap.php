@@ -38,6 +38,7 @@ require_once __DIR__ . '/lib/ActivitySchema.php';
 require_once __DIR__ . '/lib/ActivityService.php';
 require_once __DIR__ . '/lib/ProjectService.php';
 require_once __DIR__ . '/lib/CsvActivityImport.php';
+require_once __DIR__ . '/lib/ThumbnailService.php';
 
 try {
     $configFile = getenv('CMM_AUTH_CONFIG') ?: __DIR__ . '/config/config.php';
@@ -91,6 +92,7 @@ try {
         'activity' => $activityService,
         'activity_schema' => $activitySchema,
         'activity_config' => $activityConfig,
+        'thumbnail' => new CommunityMapMaker\Activity\ThumbnailService((array)($activityConfig['thumbnail'] ?? [])),
         'project_repo' => $projectRepo,
         'project_service' => $projectService,
         'csv_activity_import' => new CsvActivityImport($activitySchema),

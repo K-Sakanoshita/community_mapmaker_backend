@@ -35,6 +35,12 @@ return [
     ],
     'activity' => [
         'max_payload_bytes' => 262144,
+        // GD + cURL required. Keep the writable cache outside the Web document root.
+        'thumbnail' => [
+            'cache_ttl' => 86400,
+            'max_entries' => 1000,
+            // 'cache_dir' => '/private/writable/thumbnail-cache',
+        ],
         'apps' => [
             'playgrounds' => [
                 'id_prefix' => 'Playgrounds',

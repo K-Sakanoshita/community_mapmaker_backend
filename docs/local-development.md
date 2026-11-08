@@ -59,3 +59,6 @@ CMM_TEST_WEB_PORT=18081 CMM_TEST_HTTPS_PORT=18444 CMM_TEST_DB_PORT=13307 ./scrip
 
 
 [READMEへ戻る](../README.md)
+
+
+画像サムネイルAPI用にDockerイメージへGD（JPEG・PNG・WebP）とEXIFを組み込んでいます。変更前のコンテナは再ビルドが必要です。`php tests/ThumbnailServiceTest.php`で画像変換・キャッシュ・接続先制限を検証できます。`php -d disable_functions=imagewebp tests/ThumbnailServiceTest.php`ではWebP非対応時のJPEG／PNGへの切り替えも検証します。DB・Webを用いる`CMM_LOCAL_THUMBNAIL_TEST=1 php tests/ThumbnailHttpTest.php`は、ローカル設定とseedアカウントを備えた使い捨てのテスト環境内で実行してください。このHTTPテストは接続元`127.0.0.1`のサムネイル用レート制限状態も使用・削除します。

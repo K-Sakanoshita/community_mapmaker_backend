@@ -382,3 +382,40 @@ CookieはHttpOnly・SameSite=Strict・有効期限なしです。通常はブラ
 - 公開登録成功時は、メールを持つ有効な管理者へ通知します。通知失敗は登録を取り消しません。通知にはパスワード・トークンを含めず、管理者招待・確認メール再送は通知対象外です。
 
 画面のURLとメール設定は[画面と管理操作](admin-guide.md#ユーザー登録)を参照してください。
+
+
+### 画像サムネイルAPI
+
+`GET api/thumbnail.php?app=APP&id=ACTIVITY_ID&field=image` は、登録済みActivityの画像URLから軽量なサムネイルを生成し、**画像バイナリ**を返します。`<img src="...">`に直接指定できます。読み取り範囲はActivity GETと同じで、認証不要です。毎回Project・Activityの存在を確認するため、削除後は生成済みキャッシュも取得できません。
+
+| パラメーター | 内容 |
+|---|---|
+| `app` | 必須。Projectキー |
+| `id` | 必須。Activity ID（`/`などはURLエンコード） |
+| `field` | `image`型のフィールド名。省略時は`image` |
+| `index` | 値がURL配列の場合の位置。0始まり、既定0、最大999 |
+
+登録前のURLには `POST api/thumbnail.php` を使用します。Basic認証または管理画面セッションと、指定Projectへの書き込み権限が必要です。匿名投稿を許可しているProjectでも認証を要求します。元データへの登録・変更は行いません。
+
+```json
+{"app":"APP","url":"https://example.org/photo.jpg"}
+```
+
+POSTも200で画像バイナリを返します。例えば次のように保存できます。
+
+```sh
+curl --user USERID --json '{"app":"APP","url":"https://example.org/photo.jpg"}' \
+  https://api.example.jp/api/thumbnail.php --output thumbnail.webp
+```
+
+- 長辺400px以内、縦横比を保持し、拡大しません。品質80のWebPで保存し、GDのWebP非対応時はJPEG品質80（元JPEG）または透過PNGへ切り替えます。応答の`Content-Type`で形式を判断してください。元画像によっては容量が減らない場合もあります。
+- EXIF拡張が有効な場合はJPEGの向き補正を行います。再エンコード時にEXIF等のメタデータを除去します。透過は保持し、GIF等のアニメーションは静止画になります。
+- 入力はHTTP/HTTPSの直接画像URLのみ。JPEG・PNG・GIF・WebP、最大8MiB／600万画素。利用可能メモリが不足する場合も拒否します。`File:...`、ファイル名だけの参照、SVG、HEIC等は対象外です。
+- 公開IPv4のポート80／443のみへ接続し、接続IPを固定します。内部IP、資格情報、フラグメントは禁止。リダイレクトは最大3回で毎回取得先を検査し、通信時間はDNS解決を除き合計12秒以内です。元サーバが取得を拒否する画像には対応できません。
+- キャッシュは元URLと変換条件で識別し、既定24時間・最大1000件。失敗は60秒保持し、期限切れ・古いファイルは次回生成時に削除します。生成処理はサーバ内で1件ずつに制限します。
+- キャッシュミス時は接続元IPごとに30回／60秒に制限します。キャッシュヒットはこの制限を消費しません。リバースプロキシ経由ではバックエンドに見える接続元IP単位になります。
+- `ETag`と条件付きGET（304）に対応。ブラウザーには`Cache-Control: private, no-cache`を返し、削除状態を毎回再確認します。
+
+エラーは既存APIと同じJSON形式です。422は入力不正、401／403はPOSTの認証・権限不足、404はProject・Activity・画像なし、429は生成回数超過、502（`image_unavailable`）は取得・デコード失敗やサイズ・接続先制限、503（`thumbnail_busy`、`Retry-After: 2`）は別の生成処理が実行中、500はGD未導入や保存領域の問題等です。
+
+設定は`activity.thumbnail`の`cache_dir`、`cache_ttl`（60〜604800秒）、`max_entries`（1〜10000）。キャッシュ保存先はWeb公開領域の外に置き、PHP実行ユーザーの書き込みを許可してください。未指定時はシステム一時ディレクトリの`cmm-thumbnails-v1`を使用します。原本の保存・Activityへの自動的なURL追加・一括事前生成は行いません。
