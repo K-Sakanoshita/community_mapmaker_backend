@@ -18,6 +18,15 @@ $reject = static function (callable $callback, string $message) use ($check): vo
     $check(false, $message);
 };
 $public = static fn(string $host): array => ['93.184.215.14'];
+$japaneseUrl = 'https://example.org/画像/公園.jpg?名前=写真&token=a%2Fb+1';
+$encodedUrl = 'https://example.org/%E7%94%BB%E5%83%8F/%E5%85%AC%E5%9C%92.jpg?%E5%90%8D%E5%89%8D=%E5%86%99%E7%9C%9F&token=a%2Fb+1';
+$check(ThumbnailSource::normalizeUrl($japaneseUrl) === $encodedUrl, 'Encode Japanese path and query while preserving delimiters and escapes');
+$check(ThumbnailSource::normalizeUrl($encodedUrl) === $encodedUrl, 'Do not double-encode escaped URLs');
+$check(ThumbnailSource::normalizeUrl('https://example.org/公園 写真.jpg?q=公園 写真') === 'https://example.org/%E5%85%AC%E5%9C%92%20%E5%86%99%E7%9C%9F.jpg?q=%E5%85%AC%E5%9C%92%20%E5%86%99%E7%9C%9F', 'Encode spaces in Japanese filenames and query values');
+$reject(static fn() => ThumbnailSource::normalizeUrl('https://bad host/画像.jpg'), 'Do not allow spaces in host names');
+$check(ThumbnailSource::normalizeUrl('https://example.org/%E7%94%BB像.jpg?q=%252F') === 'https://example.org/%E7%94%BB%E5%83%8F.jpg?q=%252F', 'Handle mixed raw and escaped Japanese without changing escaped percent');
+$check(ThumbnailSource::target($japaneseUrl, $public) === ['example.org', 443, '93.184.215.14'], 'Japanese URL uses the validated host');
+$reject(static fn() => ThumbnailSource::target('http://127.0.0.1/画像.jpg'), 'Normalization must not bypass the public-address check');
 $check(ThumbnailSource::target('https://example.org/photo.png', $public) === ['example.org', 443, '93.184.215.14'], 'Pin public DNS result');
 foreach (['http://127.0.0.1/a', 'http://10.0.0.1/a', 'http://169.254.169.254/a', 'http://100.64.0.1/a',
     'http://192.0.0.1/a', 'http://0.0.0.0/a', 'http://224.0.0.1/a', 'http://[::1]/a',
@@ -85,6 +94,15 @@ try {
     $reject(static fn() => $broken->get('https://example.org/broken.jpg'), 'Reject invalid upstream response');
     $reject(static fn() => $broken->get('https://example.org/broken.jpg'), 'Negative-cache upstream failure');
     $check($failed === 1, 'Repeated failures do not refetch for 60 seconds');
+    $received = [];
+    $japaneseService = new ThumbnailService(['cache_dir' => $dir], static function (string $url) use (&$received, $jpeg): string {
+        $received[] = $url;
+        return $jpeg;
+    });
+    $japaneseService->get($japaneseUrl);
+    $same = $japaneseService->get($encodedUrl);
+    $check($received === [$encodedUrl], 'Downloader receives a correctly escaped URL exactly once');
+    $check($same['cached'], 'Raw and escaped Japanese URLs share the cache');
 } finally {
     foreach (glob($dir . '/*') ?: [] as $file) unlink($file);
     if (is_dir($dir)) rmdir($dir);

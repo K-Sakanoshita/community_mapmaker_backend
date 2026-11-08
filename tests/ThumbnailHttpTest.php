@@ -35,6 +35,9 @@ $image = imagecreatetruecolor(800, 400);
 ob_start(); imagejpeg($image); $source = ob_get_clean(); imagedestroy($image);
 $cache = new ThumbnailService([], static fn() => $source);
 $cache->get($url);
+$japaneseUrl = 'https://example.org/' . $app . '/公園 写真.jpg?名前=写真&token=a%2Fb';
+$encodedJapaneseUrl = \CommunityMapMaker\Activity\ThumbnailSource::normalizeUrl($japaneseUrl);
+$cache->get($japaneseUrl);
 $update = static function (array $data) use ($pdo, $app): void {
     $pdo->prepare('UPDATE activities SET data_json=? WHERE app_key=?')->execute([json_encode($data), $app]);
 };
@@ -61,6 +64,13 @@ try {
     $check($request('', 'POST', ['app' => $app, 'url' => $url], 'localviewer')[0] === 403, 'Viewer cannot generate arbitrary URL');
     [$status, $body] = $request('', 'POST', ['app' => $app, 'url' => $url], 'localadmin');
     $check($status === 200 && getimagesizefromstring($body)[0] === 400, 'Authenticated POST returns image');
+    foreach ([$japaneseUrl, $encodedJapaneseUrl] as $imageUrl) {
+        $update(['image' => $imageUrl]);
+        [$status, $imageBody] = $request($path);
+        $check($status === 200 && @getimagesizefromstring($imageBody)[0] === 400, 'GET accepts raw or escaped Japanese image URL');
+        [$status, $imageBody] = $request('', 'POST', ['app' => $app, 'url' => $imageUrl], 'localadmin');
+        $check($status === 200 && @getimagesizefromstring($imageBody)[0] === 400, 'POST accepts raw or escaped Japanese image URL');
+    }
     $check($request('', 'POST', ['app' => $app, 'url' => 'file:///etc/passwd'], 'localadmin')[0] === 422, 'Reject unsupported URL scheme');
     $update(['image' => [$url, $url]]);
     $check($request($path . '&index=1')[0] === 200, 'Select URL from an image array');
@@ -89,7 +99,7 @@ try {
     $pdo->prepare('DELETE FROM activities WHERE app_key=?')->execute([$app]);
     $pdo->prepare('DELETE FROM projects WHERE app_key=?')->execute([$app]);
     $pdo->prepare('DELETE FROM auth_rate_limits WHERE action_key=? AND subject_hash=?')->execute(['thumbnail_client', hash_hmac('sha256', '127.0.0.1', $config['auth']['rate_limit_secret'])]);
-    foreach ([$url, 'http://127.0.0.1/private'] as $key) {
+    foreach ([$url, $encodedJapaneseUrl, 'http://127.0.0.1/private'] as $key) {
         $hash = hash('sha256', '400:80:webp:' . $key);
         foreach (['.img', '.fail'] as $suffix) { $file = $cacheDir . '/' . $hash . $suffix; if (is_file($file)) unlink($file); }
     }

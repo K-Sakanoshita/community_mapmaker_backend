@@ -27,10 +27,8 @@ final class ThumbnailService
     public function get(string $url, ?callable $beforeDownload = null): array
     {
         if (!extension_loaded('gd')) throw new RuntimeException('GD is required for thumbnails.');
-        // Validate the URL even on cache hits. DNS validation happens before each connection.
-        if (!preg_match('~\Ahttps?://~i', $url) || strlen($url) > 4096) {
-            throw new ThumbnailSourceException('Expected an absolute HTTP(S) image URL.');
-        }
+        // Use the same URL for validation, cache lookup and HTTP transfer.
+        $url = ThumbnailSource::normalizeUrl($url);
         if (!is_dir($this->cacheDir) && !@mkdir($this->cacheDir, 0700, true) && !is_dir($this->cacheDir)) {
             throw new RuntimeException('Thumbnail cache is not writable.');
         }

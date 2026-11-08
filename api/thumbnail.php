@@ -10,6 +10,7 @@ use CommunityMapMaker\Activity\ActivityApi;
 use CommunityMapMaker\Activity\ActivityValidationException;
 use CommunityMapMaker\Activity\ThumbnailBusyException;
 use CommunityMapMaker\Activity\ThumbnailSourceException;
+use CommunityMapMaker\Activity\ThumbnailSource;
 use CommunityMapMaker\Auth\Http;
 use CommunityMapMaker\Auth\RateLimiter;
 
@@ -43,10 +44,10 @@ ActivityApi::run(function () use ($container, $method): array {
         $url = is_array($value) ? ($value[(int)$index] ?? null) : ($index === '0' ? $value : null);
         if ($url === null || $url === '') return [404, ['status' => 'error', 'code' => 'image_not_found']];
     }
-    if (!is_string($url) || strlen($url) > 4096 || !filter_var($url, FILTER_VALIDATE_URL)
-        || !in_array(strtolower((string)parse_url($url, PHP_URL_SCHEME)), ['http', 'https'], true)
-        || preg_match('/[\x00-\x20\x7f\\\\]/', $url)
-        || parse_url($url, PHP_URL_USER) !== null || parse_url($url, PHP_URL_PASS) !== null || parse_url($url, PHP_URL_FRAGMENT) !== null) {
+    try {
+        if (!is_string($url)) throw new ThumbnailSourceException('Expected an image URL.');
+        $url = ThumbnailSource::normalizeUrl($url);
+    } catch (ThumbnailSourceException) {
         throw new ActivityValidationException(['url' => 'Expected an absolute HTTP(S) image URL without credentials or fragment.']);
     }
     try {

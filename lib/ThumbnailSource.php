@@ -12,16 +12,26 @@ final class ThumbnailSource
 {
     public const MAX_BYTES = 8388608;
 
-    public static function target(string $url, ?callable $resolve = null): array
+    /** Encode raw UTF-8 bytes without changing URL delimiters or existing escapes. */
+    public static function normalizeUrl(string $url): string
     {
-        if (strlen($url) > 4096 || preg_match('/[\x00-\x20\x7f\\\\]/', $url)) {
+        if (strlen($url) > 4096 || preg_match('/[\x00-\x1f\x7f\\\\]/', $url) || preg_match('//u', $url) !== 1) {
             throw new ThumbnailSourceException('Invalid image URL.');
         }
+        $url = preg_replace_callback('/[\x20\x80-\xff]/', static fn(array $match): string => rawurlencode($match[0]), $url);
         $parts = parse_url($url);
-        if (!$parts || !in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)
+        if (strlen($url) > 4096 || !filter_var($url, FILTER_VALIDATE_URL) || !$parts
+            || !in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)
             || empty($parts['host']) || isset($parts['user']) || isset($parts['pass']) || isset($parts['fragment'])) {
             throw new ThumbnailSourceException('Expected an HTTP(S) image URL without credentials or fragment.');
         }
+        return $url;
+    }
+
+    public static function target(string $url, ?callable $resolve = null): array
+    {
+        $url = self::normalizeUrl($url);
+        $parts = parse_url($url);
         $host = strtolower($parts['host']);
         $port = $parts['port'] ?? (strtolower($parts['scheme']) === 'https' ? 443 : 80);
         if (!in_array($port, [80, 443], true) || !preg_match('/\A[a-z0-9.-]+\z/', $host)) {
@@ -47,6 +57,7 @@ final class ThumbnailSource
         require_once __DIR__ . '/PortalPreview.php';
         $deadline = microtime(true) + 12;
         for ($hop = 0; $hop <= 3; $hop++) {
+            $url = self::normalizeUrl($url);
             [$host, $port, $ip] = self::target($url);
             $remaining = (int)(($deadline - microtime(true)) * 1000);
             if ($remaining <= 0) throw new ThumbnailSourceException('Image download timed out.');
