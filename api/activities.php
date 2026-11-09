@@ -4,7 +4,10 @@ declare(strict_types=1);
 use CommunityMapMaker\Activity\ActivityApi;
 use CommunityMapMaker\Activity\ActivityValidationException;
 use CommunityMapMaker\Auth\Http;
+use CommunityMapMaker\Auth\ResponseCompression;
 
+require_once dirname(__DIR__) . '/lib/ResponseCompression.php';
+ResponseCompression::start();
 $container = require dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/lib/ActivityApi.php';
 

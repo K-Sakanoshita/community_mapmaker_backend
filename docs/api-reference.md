@@ -419,3 +419,10 @@ curl --user USERID --json '{"app":"APP","url":"https://example.org/photo.jpg"}' 
 エラーは既存APIと同じJSON形式です。422は入力不正、401／403はPOSTの認証・権限不足、404はProject・Activity・画像なし、429は生成回数超過、502（`image_unavailable`）は取得・デコード失敗やサイズ・接続先制限、503（`thumbnail_busy`、`Retry-After: 2`）は同じ画像を生成中、または2件の生成枠が使用中、500はGD未導入や保存領域の問題等です。
 
 設定は`activity.thumbnail`の`cache_dir`、`cache_ttl`（60〜604800秒）、`max_entries`（1〜10000）。キャッシュ保存先はWeb公開領域の外に置き、PHP実行ユーザーの書き込みを許可してください。未指定時はシステム一時ディレクトリの`cmm-thumbnails-v1`を使用します。原本の保存・Activityへの自動的なURL追加・一括事前生成は行いません。
+
+
+## Activity応答のgzip圧縮
+
+`GET api/activities.php`の成功応答は、クライアントの`Accept-Encoding`がgzipを許可する場合、JSON・CSVの両方をgzip圧縮します。ブラウザーの`fetch()`等では通常、自動で展開されるため呼び出し側の変更は不要です。手動のクライアントでは`Content-Encoding: gzip`に応じて展開してください（curlなら`--compressed`）。
+
+1KiB未満、圧縮しても小さくならない応答、gzip非対応や`gzip;q=0`を指定した要求は未圧縮で返します。書き込み応答やエラー応答は対象外です。既存の圧縮が有効な場合は二重圧縮しません。`Vary: Accept-Encoding`を付け、CORSの`Vary: Origin`、CSVのBOM・ファイル名・改行、JSONの内容を保持します。圧縮にはPHPのzlibを使い、DB検索や取得件数は変更しません。
