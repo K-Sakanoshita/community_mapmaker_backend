@@ -12,6 +12,7 @@ final class ThumbnailBusyException extends RuntimeException {}
 
 final class ThumbnailService
 {
+    private const MAX_CONCURRENT_GENERATIONS = 2;
     private string $cacheDir;
     private int $ttl;
     private int $maxEntries;
@@ -35,39 +36,80 @@ final class ThumbnailService
         $key = hash('sha256', '400:80:' . (function_exists('imagewebp') ? 'webp:' : 'fallback:') . $url);
         $file = $this->cacheDir . '/' . $key . '.img';
         if (($cached = $this->cached($file)) !== null) return $cached;
-        $lock = fopen($this->cacheDir . '/generation.lock', 'c');
-        if ($lock === false) throw new RuntimeException('Cannot open thumbnail cache lock.');
+        $slot = $this->withCacheLock(fn() => $this->acquireGenerationSlot($key));
         try {
-            if (!flock($lock, LOCK_EX | LOCK_NB)) throw new ThumbnailBusyException('Thumbnail generation is busy.');
             if (($cached = $this->cached($file)) !== null) return $cached;
             $failed = $this->cacheDir . '/' . $key . '.fail';
             if (is_file($failed) && time() - (int)filemtime($failed) < 60) {
                 throw new ThumbnailSourceException('Image is temporarily unavailable.');
             }
             if ($beforeDownload !== null) $beforeDownload();
-            $this->prune();
             try {
                 $source = $this->download === null ? ThumbnailSource::fetch($url) : ($this->download)($url);
                 $result = $this->render($source);
             } catch (ThumbnailSourceException $error) {
-                @touch($failed);
+                $this->withCacheLock(function () use ($failed): void {
+                    $this->prune();
+                    @touch($failed);
+                });
                 throw $error;
             }
             $temp = tempnam($this->cacheDir, 'thumb-');
             if ($temp === false) throw new RuntimeException('Cannot create thumbnail cache file.');
             try {
-                if (file_put_contents($temp, $result['body']) !== strlen($result['body']) || !rename($temp, $file)) {
-                    throw new RuntimeException('Cannot save thumbnail cache.');
-                }
+                if (file_put_contents($temp, $result['body']) !== strlen($result['body'])) throw new RuntimeException('Cannot save thumbnail cache.');
+                $this->withCacheLock(function () use ($temp, $file, $failed): void {
+                    $this->prune();
+                    if (!rename($temp, $file)) throw new RuntimeException('Cannot save thumbnail cache.');
+                    if (is_file($failed)) unlink($failed);
+                });
             } finally { if (is_file($temp)) unlink($temp); }
-            if (is_file($failed)) unlink($failed);
             return $result + ['cached' => false];
+        } finally { fclose($slot); }
+    }
+
+    /** Only slot registration and cache publication hold this short metadata lock. */
+    private function withCacheLock(callable $operation): mixed
+    {
+        $lock = fopen($this->cacheDir . '/generation.lock', 'c');
+        if ($lock === false) throw new RuntimeException('Cannot open thumbnail cache lock.');
+        try {
+            if (!flock($lock, LOCK_EX)) throw new RuntimeException('Cannot lock thumbnail cache.');
+            return $operation();
         } finally { fclose($lock); }
+    }
+
+    /** Register an image key atomically, keeping only two persistent lock files. */
+    private function acquireGenerationSlot(string $key)
+    {
+        $available = null;
+        try {
+            for ($i = 0; $i < self::MAX_CONCURRENT_GENERATIONS; $i++) {
+                $slot = fopen($this->cacheDir . '/generation-' . $i . '.lock', 'c+');
+                if ($slot === false) throw new RuntimeException('Cannot open thumbnail generation slot.');
+                if (flock($slot, LOCK_EX | LOCK_NB)) {
+                    if ($available === null) $available = $slot;
+                    else fclose($slot);
+                } else {
+                    $activeKey = stream_get_contents($slot);
+                    fclose($slot);
+                    if ($activeKey === $key) throw new ThumbnailBusyException('This image is already being generated.');
+                }
+            }
+            if ($available === null) throw new ThumbnailBusyException('Both thumbnail generation slots are busy.');
+            if (!ftruncate($available, 0) || fwrite($available, $key) !== strlen($key) || !fflush($available)) {
+                throw new RuntimeException('Cannot register thumbnail generation slot.');
+            }
+            $result = $available;
+            $available = null;
+            return $result;
+        } finally { if ($available !== null) fclose($available); }
     }
 
     private function cached(string $file): ?array
     {
-        if (!is_file($file) || time() - (int)filemtime($file) >= $this->ttl) return null;
+        clearstatcache(true, $file);
+        if (!is_file($file) || time() - (int)@filemtime($file) >= $this->ttl) return null;
         $body = @file_get_contents($file);
         $info = $body === false ? false : @getimagesizefromstring($body);
         if (!$info) return null;

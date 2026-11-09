@@ -80,10 +80,14 @@ try {
     $update(['image' => 'http://127.0.0.1/private']);
     $check($request($path)[0] === 502, 'Local-network source blocked through HTTP');
     $update(['image' => $url]);
-    $lock = fopen($cacheDir . '/generation.lock', 'c'); flock($lock, LOCK_EX);
+    $locks = [];
+    for ($slot = 0; $slot < 2; $slot++) {
+        $locks[] = fopen($cacheDir . '/generation-' . $slot . '.lock', 'c+');
+        flock($locks[$slot], LOCK_EX);
+    }
     try {
         $check($request('', 'POST', ['app' => $app, 'url' => $url . '?busy=1'], 'localadmin')[0] === 503, 'Concurrent generation returns 503');
-    } finally { fclose($lock); }
+    } finally { foreach ($locks as $lock) fclose($lock); }
     $subject = '127.0.0.1';
     $limiter = new RateLimiter($pdo, $config['auth']['rate_limit_secret']);
     for ($i = 0; $i < 30; $i++) $limiter->hit('thumbnail_client', $subject, 30, 60);

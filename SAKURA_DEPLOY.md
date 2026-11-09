@@ -174,4 +174,4 @@ API が HTTP 500 の場合は、さくらのコントロールパネルのエラ
 
 `api/thumbnail.php`にはPHPのGD・cURLが必要です。`extension_loaded('gd')`、`extension_loaded('curl')`と`gd_info()`で実サーバの対応形式を確認してください。GDがWebPに対応していない場合はJPEG／透過PNGで生成します。EXIF拡張が有効ならJPEGの向きを補正します。Imagickは不要です。
 
-`activity.thumbnail.cache_dir`を設定する場合はWeb公開ディレクトリの外の、PHPが書き込める専用ディレクトリを指定してください。未設定時はシステム一時ディレクトリを使います。共有サーバーへの負荷を抑えるため、生成を1件ずつに制限し、容量・画素数・取得時間・生成回数の上限を設けています。API仕様・制限は[APIリファレンス](docs/api-reference.md#画像サムネイルapi)を参照してください。
+`activity.thumbnail.cache_dir`を設定する場合はWeb公開ディレクトリの外の、PHPが書き込める専用ディレクトリを指定してください。未設定時はシステム一時ディレクトリを使います。共有サーバーへの負荷を抑えるため、同じ画像を重複生成せず、別画像の生成は同じキャッシュ保存先につき最大2件に制限し、容量・画素数・取得時間・生成回数の上限を設けています。API仕様・制限は[APIリファレンス](docs/api-reference.md#画像サムネイルapi)を参照してください。

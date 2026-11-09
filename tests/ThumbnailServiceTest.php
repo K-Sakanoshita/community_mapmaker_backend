@@ -60,11 +60,15 @@ try {
     foreach (glob($dir . '/*.img') as $file) touch($file, time() - 90000);
     clearstatcache(); $service->get('https://example.org/c.jpg');
     $check($downloads === 4, 'Expired source is fetched again');
-    $lock = fopen($dir . '/generation.lock', 'c'); flock($lock, LOCK_EX);
+    $locks = [];
+    for ($slot = 0; $slot < 2; $slot++) {
+        $locks[] = fopen($dir . '/generation-' . $slot . '.lock', 'c+');
+        flock($locks[$slot], LOCK_EX);
+    }
     try {
         try { $service->get('https://example.org/locked.jpg'); $check(false, 'Concurrent miss must be busy'); }
         catch (ThumbnailBusyException) { $check(true, 'Concurrent miss is rejected'); }
-    } finally { fclose($lock); }
+    } finally { foreach ($locks as $lock) fclose($lock); }
 
     $transparent = imagecreatetruecolor(30, 20);
     imagealphablending($transparent, false); imagesavealpha($transparent, true);
