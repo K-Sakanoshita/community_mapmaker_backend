@@ -13,6 +13,8 @@ final class ThumbnailBusyException extends RuntimeException {}
 final class ThumbnailService
 {
     private const MAX_CONCURRENT_GENERATIONS = 2;
+    // WordPress's 2560px scaled square images contain 6,553,600 pixels.
+    private const MAX_PIXELS = 8000000;
     private string $cacheDir;
     private int $ttl;
     private int $maxEntries;
@@ -136,7 +138,7 @@ final class ThumbnailService
             throw new ThumbnailSourceException('Expected a JPEG, PNG, GIF or WebP image.');
         }
         $pixels = $info[0] * $info[1];
-        if ($info[0] < 1 || $info[1] < 1 || $pixels > 6000000) throw new ThumbnailSourceException('Image exceeds six million pixels.');
+        if ($info[0] < 1 || $info[1] < 1 || $pixels > self::MAX_PIXELS) throw new ThumbnailSourceException('Image exceeds eight million pixels.');
         $limit = trim((string)ini_get('memory_limit'));
         $bytes = (int)$limit;
         $bytes *= match (strtolower(substr($limit, -1))) { 'g' => 1073741824, 'm' => 1048576, 'k' => 1024, default => 1 };

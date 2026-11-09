@@ -91,6 +91,18 @@ try {
     $reject(static fn() => $service->render('<svg xmlns="http://www.w3.org/2000/svg"/>'), 'Reject SVG');
     $reject(static fn() => $service->render('<html>not an image</html>'), 'Reject HTML');
     $reject(static fn() => $service->render(str_repeat('x', ThumbnailSource::MAX_BYTES + 1)), 'Reject oversized download');
+    $wordpress = imagecreatetruecolor(2560, 2560);
+    ob_start(); imagejpeg($wordpress); $largeJpeg = ob_get_clean(); imagedestroy($wordpress);
+    $result = $service->render($largeJpeg);
+    $check($result['width'] === 400 && $result['height'] === 400 && getimagesizefromstring($result['body'])[0] === 400, 'Accept WordPress 2560px square images above six million pixels');
+    $memoryLimit = ini_get('memory_limit');
+    if (ini_set('memory_limit', '64M') === false) throw new RuntimeException('Cannot set memory limit for the budget test.');
+    try {
+        $reject(static fn() => $service->render($largeJpeg), 'Keep rejecting images when the memory budget is insufficient');
+    } finally { ini_set('memory_limit', $memoryLimit); }
+    unset($largeJpeg, $result);
+    $overLimit = substr_replace($png, pack('NN', 4000, 2001), 16, 8);
+    $reject(static fn() => $service->render($overLimit), 'Reject images above eight million pixels before decode');
     $huge = substr_replace($png, pack('NN', 4000, 4000), 16, 8);
     $reject(static fn() => $service->render($huge), 'Reject excessive pixels before decode');
     $failed = 0;
