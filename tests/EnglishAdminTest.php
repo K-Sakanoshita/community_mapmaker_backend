@@ -6,18 +6,19 @@ function checkEnglishAdmin(bool $condition, string $message): void
     if (!$condition) throw new RuntimeException($message);
 }
 
-$root = dirname(__DIR__);
+$root = dirname(__DIR__) . '/www';
 ob_start();
 require $root . '/en/admin/index.php';
 $html = (string)ob_get_clean();
 checkEnglishAdmin(str_contains($html, '<html lang="en">'), 'English page language is missing.');
 checkEnglishAdmin(str_contains($html, '<base href="../../admin/">'), 'Shared asset base is missing.');
-checkEnglishAdmin(str_contains($html, 'i18n.js?v=20261003-activity-count'), 'Message loader is missing.');
-checkEnglishAdmin(str_contains($html, 'admin.js?v=20261007-jst'), 'Shared script is missing.');
+checkEnglishAdmin(str_contains($html, 'i18n.js?v=20261029-page-rendering'), 'Message loader is missing.');
+checkEnglishAdmin((bool)preg_match('/src="admin\.js\?v=[^"]+"/', $html), 'Shared script is missing.');
 checkEnglishAdmin(str_contains($html, 'Project Management'), 'English page text is missing.');
-checkEnglishAdmin(str_contains($html, 'id="columnsBackButton"') && str_contains($html, 'id="activitiesBackButton"') && str_contains($html, 'Back to projects'), 'Project list return buttons are missing.');
+checkEnglishAdmin(str_contains($html, 'id="navigationProjects"') && str_contains($html, 'id="navigationDetail"') && str_contains($html, 'site-breadcrumbs') && str_contains($html, 'id="headerProjectListLink"'), 'Shared project navigation is missing.');
 checkEnglishAdmin(!preg_match('/[ぁ-んァ-ン一-龥]/u', $html), 'Japanese interface text remains in English HTML.');
 
+checkEnglishAdmin(!str_contains($html, 'id="projectsView"') && !str_contains($html, 'id="projectsGrid"'), 'Separate console project list remains.');
 $script = file_get_contents($root . '/admin/admin.js');
 $ja = json_decode(file_get_contents($root . '/admin/ja.json'), true, 512, JSON_THROW_ON_ERROR);
 $en = json_decode(file_get_contents($root . '/admin/en.json'), true, 512, JSON_THROW_ON_ERROR);

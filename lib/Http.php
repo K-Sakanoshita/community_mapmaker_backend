@@ -19,6 +19,7 @@ final class Http
         $allowed = array_values(array_filter(array_map('strval', $authConfig['allowed_origins'] ?? [])));
 
         $originAllowed = $origin === ''
+            || self::isSameOrigin($origin, $authConfig)
             || in_array($origin, $allowed, true)
             || (
                 ($authConfig['allow_private_network_origins'] ?? false) === true
@@ -47,6 +48,34 @@ final class Http
         if (!$originAllowed) {
             self::respond(403, ['status' => 'error', 'code' => 'origin_not_allowed']);
         }
+    }
+
+    private static function isSameOrigin(string $origin, array $authConfig): bool
+    {
+        $scheme = !empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off'
+            ? 'https' : 'http';
+        if (($authConfig['trust_proxy_headers'] ?? false) === true) {
+            $forwarded = strtolower(trim(explode(',', (string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
+            if (in_array($forwarded, ['http', 'https'], true)) $scheme = $forwarded;
+        }
+        $host = (string)($_SERVER['HTTP_HOST'] ?? '');
+        if ($host === '') return false;
+        $requestOrigin = self::originParts($scheme . '://' . $host);
+        $suppliedOrigin = self::originParts($origin);
+        return $requestOrigin !== null && $requestOrigin === $suppliedOrigin;
+    }
+
+    /** Compare scheme, host and effective port; reject non-Origin URL components. */
+    private static function originParts(string $origin): ?array
+    {
+        if (preg_match('/[\x00-\x20\x7f\\\\]/', $origin)) return null;
+        $parts = parse_url($origin);
+        if (!is_array($parts) || empty($parts['host'])
+            || isset($parts['user']) || isset($parts['pass']) || isset($parts['path'])
+            || isset($parts['query']) || isset($parts['fragment'])) return null;
+        $scheme = strtolower($parts['scheme'] ?? '');
+        if (!in_array($scheme, ['http', 'https'], true)) return null;
+        return [$scheme, strtolower($parts['host']), $parts['port'] ?? ($scheme === 'https' ? 443 : 80)];
     }
 
     private static function isPrivateNetworkOrigin(string $origin, array $allowedHosts): bool

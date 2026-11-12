@@ -53,12 +53,12 @@ final class AuthService
             $project = null;
             if ($appKey !== '') {
                 $project = $this->projects?->find($appKey);
-                if ($project === null || !$project['enabled'] || !($project['frontend_public'] ?? false)
+                if ($project === null || !$project['enabled'] || !($project['frontend_public'] ?? false) || !($project['recruiting'] ?? false)
                     || ($project['is_deleted'] ?? false) || $this->projectAccess === null) {
                     throw new ValidationException(['app_key' => 'This project does not accept public registration.']);
                 }
             }
-            $created = $this->users->create($userid, $useridNormalized, $email, $emailNormalized, $passwordHash, $status, 'contributor');
+            $created = $this->users->create($userid, $useridNormalized, $email, $emailNormalized, $passwordHash, $status, 'user');
             if ($project !== null) {
                 $this->projectAccess->assignProject((int)$created['id'], (int)$project['id'], 'contributor');
             }
@@ -72,7 +72,7 @@ final class AuthService
         if ($requiresVerification && $tokenData !== null) {
             $sent = $this->mailer->sendVerification(
                 $user,
-                $this->tokenUrl('verification_url', $tokenData['token']),
+                $this->verificationUrl($tokenData['token'], $appKey),
                 $tokenData['expires_at']
             );
         }
@@ -103,13 +103,14 @@ final class AuthService
         }
     }
 
-    public function verifyEmail(string $rawToken): void
+    public function verifyEmail(string $rawToken): int
     {
         $tokenHash = $this->validateToken($rawToken);
-        $this->transactions->run(function () use ($tokenHash): void {
+        return $this->transactions->run(function () use ($tokenHash): int {
             $token = $this->tokens->consume(self::VERIFY_EMAIL, $tokenHash, $this->now());
             if ($token === null) throw new InvalidTokenException('The verification token is invalid or expired.');
             $this->users->verifyEmail((int)$token['user_id']);
+            return (int)$token['user_id'];
         });
     }
 
@@ -130,7 +131,7 @@ final class AuthService
         $tokenData = $this->transactions->run(fn(): array => $this->issueToken((int)$user['id'], self::VERIFY_EMAIL, $this->verificationTtl()));
         $sent = $this->mailer->sendVerification(
             $user,
-            $this->tokenUrl('verification_url', $tokenData['token']),
+            $this->verificationUrl($tokenData['token'], $this->singleRegistrationProject((int)$user['id'])),
             $tokenData['expires_at']
         );
         return ['accepted' => true, 'verification_email_sent' => $sent];
@@ -313,6 +314,7 @@ final class AuthService
         [, $normalized] = $this->validateIdentity($identity);
         $user = $this->users->findByIdentity($normalized);
         if ($user === null || (string)$user['status'] !== 'active') return null;
+        if (!in_array($user['role'] ?? 'user', ['user', 'admin'], true)) return null;
         if ($normalized === (string)($user['email_normalized'] ?? '') && $user['email_verified_at'] === null) return null;
         if (!password_verify($password, (string)$user['password_hash'])) return null;
         $this->users->recordLogin((int)$user['id']);
@@ -345,8 +347,8 @@ final class AuthService
     private function validateRole(mixed $value): string
     {
         $role = trim((string)$value);
-        if (!in_array($role, ['contributor', 'user', 'admin'], true)) {
-            throw new ValidationException(['role' => 'Role must be contributor, user, or admin.']);
+        if (!in_array($role, ['user', 'admin'], true)) {
+            throw new ValidationException(['role' => 'Role must be user or admin.']);
         }
         return $role;
     }
@@ -401,6 +403,18 @@ final class AuthService
             throw new RuntimeException(sprintf('auth.%s must be an HTTPS URL.', $configKey));
         }
         return $url . (str_contains($url, '?') ? '&' : '?') . 'token=' . rawurlencode($token);
+    }
+
+    private function singleRegistrationProject(int $userId): string
+    {
+        $roles = $this->projectAccess?->rolesForUser($userId) ?? [];
+        return count($roles) === 1 ? (string)array_key_first($roles) : '';
+    }
+
+    private function verificationUrl(string $token, string $appKey): string
+    {
+        $url = $this->tokenUrl('verification_url', $token);
+        return $appKey === '' ? $url : $url . '&app_key=' . rawurlencode($appKey);
     }
 
     private function enforceLimit(string $name, string $subject): void

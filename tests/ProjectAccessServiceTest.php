@@ -51,6 +51,7 @@ $service = new ProjectAccessService(new MemoryProjectAccess([
     11 => ['alpha' => 'project_admin'],
     13 => ['alpha' => 'contributor', 'beta' => 'viewer'],
     14 => ['alpha' => 'editor'],
+    15 => ['alpha' => 'banned', 'beta' => 'editor'],
 ]));
 $projects = [
     ['id' => 1, 'app_key' => 'alpha', 'project_name' => 'Alpha', 'enabled' => true],
@@ -72,15 +73,16 @@ accessAssert(array_column($ownerProjects, 'app_key') === ['alpha', 'created-4'],
 $service->assertCanWrite(['id' => 1, 'role' => 'admin'], 'gamma');
 $service->assertCanWrite(['id' => 10, 'role' => 'user'], 'alpha');
 $service->assertCanWrite(['id' => 11, 'role' => 'user'], 'alpha');
-$service->assertCanWrite(['id' => 13, 'role' => 'contributor'], 'alpha');
-$service->assertCanWrite(['id' => 14, 'role' => 'contributor'], 'alpha');
-accessDenied(fn() => $service->assertCanWrite(['id' => 13, 'role' => 'contributor'], 'beta'), 'Contributors must respect viewer assignments.');
-accessDenied(fn() => $service->assertCanWrite(['id' => 13, 'role' => 'contributor'], 'gamma'), 'Contributors must respect project assignments.');
+$service->assertCanWrite(['id' => 13, 'role' => 'user'], 'alpha');
+$service->assertCanWrite(['id' => 14, 'role' => 'user'], 'alpha');
+accessDenied(fn() => $service->assertCanWrite(['id' => 13, 'role' => 'contributor'], 'alpha'), 'Removed account roles cannot write even with project membership.');
+accessDenied(fn() => $service->assertCanWrite(['id' => 13, 'role' => 'user'], 'beta'), 'Contributors must respect viewer assignments.');
+accessDenied(fn() => $service->assertCanWrite(['id' => 13, 'role' => 'user'], 'gamma'), 'Contributors must respect project assignments.');
 accessDenied(fn() => $service->assertCanUseConsole(['id' => 14, 'role' => 'contributor']), 'Contributor accounts must not enter the console even with editor assignments.');
 accessDenied(fn() => $service->assertCanUseSpreadsheet(['id' => 13, 'role' => 'user'], 'alpha'), 'Project contributors must not use the spreadsheet.');
 accessDenied(fn() => $service->assertCanManage(['id' => 11, 'role' => 'contributor'], 'alpha'), 'Contributor accounts must not manage projects even with project-admin assignments.');
 accessAssert(array_column($service->visibleConsoleProjects(['id' => 13, 'role' => 'user'], $projects), 'app_key') === ['beta'], 'Contributor projects must be hidden from the console.');
-accessAssert(array_column($service->visibleProjects(['id' => 13, 'role' => 'contributor'], $projects), 'app_key') === ['alpha', 'beta'], 'Apps must still see assigned contributor projects.');
+accessAssert(array_column($service->visibleProjects(['id' => 13, 'role' => 'user'], $projects), 'app_key') === ['alpha', 'beta'], 'Apps must still see assigned contributor projects.');
 $service->assertCanUseSpreadsheet(['id' => 10, 'role' => 'user'], 'alpha');
 $service->assertCanUseSpreadsheet(['id' => 10, 'role' => 'user'], 'beta');
 $service->assertCanUseSpreadsheet(['id' => 1, 'role' => 'admin'], 'gamma');
@@ -101,3 +103,9 @@ accessDenied(fn() => $service->assertCanWrite(['id' => 10, 'role' => 'user'], 'g
 accessDenied(fn() => $service->assertCanWrite(['id' => 12, 'role' => 'user'], 'alpha'), 'Users without assignments must reject writes.');
 
 echo "Project access behavior: ok\n";
+
+accessAssert(array_column($service->visibleConsoleProjects(['id'=>15,'role'=>'user'], $projects), 'app_key') === ['beta'], 'Ban hides the affected console project only.');
+accessDenied(fn()=> $service->assertCanWrite(['id'=>15,'role'=>'user'], 'alpha'), 'Ban prevents posting.');
+accessDenied(fn()=> $service->assertCanManage(['id'=>15,'role'=>'user'], 'alpha'), 'Ban prevents management.');
+accessDenied(fn()=> $service->assertCanUseSpreadsheet(['id'=>15,'role'=>'user'], 'alpha'), 'Ban prevents spreadsheet access.');
+$service->assertCanWrite(['id'=>15,'role'=>'user'], 'beta');

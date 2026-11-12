@@ -66,6 +66,12 @@ interface Mailer
 
 namespace CommunityMapMaker\Activity;
 
+interface OsmCoordinateResolverInterface
+{
+    /** @return array<string,array{latitude:float,longitude:float}> Keyed by node/way/relation ID. */
+    public function resolve(array $osmids): array;
+}
+
 interface ActivityRepositoryInterface
 {
     public function list(string $appKey, ?string $osmid = null, array $options = []): array;
@@ -90,7 +96,7 @@ interface ProjectRepositoryInterface
     /** @return list<string> */
     public function deletedKeys(): array;
     public function find(string $appKey): ?array;
-    public function create(string $appKey, string $projectName, array $schema, bool $enabled = true, ?string $frontendUrl = null, bool $frontendPublic = false, ?int $createdByUserId = null): array;
-    public function update(string $appKey, ?string $projectName, ?array $schema, ?bool $enabled = null, ?string $frontendUrl = null, ?bool $frontendPublic = null): ?array;
+    public function create(string $appKey, string $projectName, array $schema, bool $enabled = true, ?string $frontendUrl = null, bool $frontendPublic = false, ?int $createdByUserId = null, bool $recruiting = false, ?array $pageRendering = null): array;
+    public function update(string $appKey, ?string $projectName, ?array $schema, ?bool $enabled = null, ?string $frontendUrl = null, ?bool $frontendPublic = null, ?bool $recruiting = null, ?array $pageRendering = null): ?array;
     public function delete(string $appKey): bool;
 }

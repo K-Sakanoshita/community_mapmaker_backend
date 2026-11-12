@@ -1,0 +1,16 @@
+{
+  "name": "community-mapmaker-park-pages",
+  "main": "park-pages.mjs",
+  "compatibility_date": "2026-07-30",
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "playgrounds.openacrossbase.net/parks/*", "zone_name": "openacrossbase.net" }
+  ],
+  "vars": {
+    "APP_KEY": "playgrounds",
+    "PUBLIC_BASE_URL": "https://playgrounds.openacrossbase.net/",
+    "PAGE_PATH_TEMPLATE": "/parks/{osm_type}/{osm_id}",
+    "SPA_INDEX_URL": "https://REPLACE_WITH_ORIGIN.example/index.html",
+    "PARK_PAGE_API_URL": "https://armd-01.sakura.ne.jp/community-mapmaker-backend/api/park-page.php"
+  }
+}

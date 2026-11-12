@@ -41,7 +41,7 @@ $roles = new class implements \CommunityMapMaker\Auth\ProjectAccessRepositoryInt
     public function assignProject(int $userId, int $projectId, string $role): void {}
 };
 $auth = new class {
-    public string $role = 'contributor';
+    public string $role = 'user';
     public function authenticate(string $identity, string $password): array { return ['id' => 1, 'role' => $this->role]; }
 };
 $container = [

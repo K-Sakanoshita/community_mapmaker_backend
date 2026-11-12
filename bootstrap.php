@@ -36,7 +36,10 @@ require_once __DIR__ . '/lib/ActivityRepository.php';
 require_once __DIR__ . '/lib/ProjectRepository.php';
 require_once __DIR__ . '/lib/ActivitySchema.php';
 require_once __DIR__ . '/lib/ActivityService.php';
+require_once __DIR__ . '/lib/OsmCoordinateResolver.php';
 require_once __DIR__ . '/lib/ProjectService.php';
+require_once __DIR__ . '/lib/OsmParkResolver.php';
+require_once __DIR__ . '/lib/ParkPageService.php';
 require_once __DIR__ . '/lib/CsvActivityImport.php';
 require_once __DIR__ . '/lib/ThumbnailService.php';
 
@@ -71,7 +74,8 @@ try {
     $activityService = new ActivityService(
         $activityRepo,
         $activitySchema,
-        $database
+        $database,
+        new CommunityMapMaker\Activity\OsmCoordinateResolver((array)($activityConfig['coordinate_lookup'] ?? []))
     );
     $projectService = new ProjectService(
         $projectRepo,
@@ -95,6 +99,11 @@ try {
         'thumbnail' => new CommunityMapMaker\Activity\ThumbnailService((array)($activityConfig['thumbnail'] ?? [])),
         'project_repo' => $projectRepo,
         'project_service' => $projectService,
+        'park_page' => new CommunityMapMaker\Activity\ParkPageService(
+            $projectService,
+            new CommunityMapMaker\Activity\OsmParkResolver((array)($activityConfig['park_lookup'] ?? [])),
+            [$activityRepo, 'publicParkSummary']
+        ),
         'csv_activity_import' => new CsvActivityImport($activitySchema),
     ];
 } catch (Throwable $error) {

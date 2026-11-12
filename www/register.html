@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <script src="site-messages.js?v=20261027-project-settings"></script>
+  <script src="site-language.js?v=20261024-language"></script>
+  <link rel="icon" href="favicon.ico?v=20261024" sizes="16x16 32x32 48x48">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20261024">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title data-site-i18n="ユーザー登録 | コミュニティマップメーカー">ユーザー登録 | コミュニティマップメーカー</title>
+  <link rel="stylesheet" href="theme.css?v=20261024">
+  <link rel="stylesheet" href="site-header.css?v=20261024-language">
+  <style>
+    body { margin: 0; min-height: 100vh; box-sizing: border-box; background: var(--cmm-background); color: var(--cmm-text); font-family: system-ui, sans-serif; }
+    main { width: min(calc(100% - 40px), 440px); margin: 32px auto 48px; padding: 30px; box-sizing: border-box; border-radius: 12px; background: var(--cmm-surface); box-shadow: 0 10px 35px var(--cmm-panel-shadow); }
+    h1 { margin: 0 0 8px; font-size: 1.7rem; } p { line-height: 1.55; }
+    label { display: block; margin: 17px 0 0; font-weight: 700; font-size: .9rem; }
+    input, select { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 11px; border: 1px solid var(--cmm-border); border-radius: 6px; font: inherit; }
+    button { width: 100%; margin-top: 23px; padding: 12px; border: 0; border-radius: 6px; background: var(--cmm-accent); color:var(--cmm-on-accent); font: inherit; font-weight: 700; cursor: pointer; }
+    main button:hover:not(:disabled) { background: var(--cmm-accent-hover); }
+    main :is(input, select, button, a, summary):focus-visible { outline: 3px solid var(--cmm-accent-hover); outline-offset: 3px; }
+    main input[type="checkbox"] { accent-color: var(--cmm-accent); }
+    button:disabled { opacity: .55; cursor: wait; } a { color: var(--cmm-accent); }
+    .hint { color: var(--cmm-muted); font-size: .85rem; } .error { color: var(--cmm-error); } .success { color: var(--cmm-success-text); }
+    #status { min-height: 1.5em; }
+    main { overflow-wrap: anywhere; } .check { display: flex; gap: 10px; font-weight: 400; line-height: 1.55; } .check input { width: 20px; height: 20px; flex-shrink: 0; margin-top: 3px; padding: 0; }
+    @media (max-width: 420px) { main { width: calc(100% - 24px); margin-top: 24px; padding: 22px; } }
+    details { margin-top: 20px; } summary { cursor: pointer; color: var(--cmm-accent); }
+  </style>
+  <link rel="stylesheet" href="site-footer.css?v=20261024">
+  <script src="site-session.js?v=20261024-username-link" defer></script>
+</head>
+<body class="site-page">
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="コミュニティマップメーカー ホーム" data-site-i18n-aria-label="コミュニティマップメーカー ホーム"><img class="brand-symbol" src="cMapmaker.png" alt="" width="500" height="500"><span><span data-site-i18n="コミュニティマップメーカー">コミュニティマップメーカー</span></span></a>
+    <nav class="header-links" aria-label="サイトメニュー" data-site-i18n-aria-label="サイトメニュー">
+      <a id="headerProjectListLink" class="project-list-link" href="./#projects" data-project-list-link><span data-site-i18n="プロジェクト一覧">プロジェクト一覧</span></a>
+      <a id="headerRegistrationLink" href="register.html"><span data-site-i18n="ユーザー登録">ユーザー登録</span></a>
+      <a id="headerLoginLink" class="login-link" href="admin/"><span data-site-i18n="ログイン">ログイン</span> <span aria-hidden="true">↗</span></a>
+      <div id="headerSession" class="session-actions" hidden>
+        <a id="currentAdmin" class="session-user" href="mypage.html"></a>
+        <button id="logoutButton" class="session-logout" type="button"><span data-site-i18n="ログアウト">ログアウト</span></button>
+      </div>
+    </nav>
+  </header>
+<main>
+  <h1 id="registrationHeading"><span data-site-i18n="ユーザー登録">ユーザー登録</span></h1>
+  <p id="registrationPurpose"><span data-site-i18n="地図づくりに参加するためのアカウントを作成します。登録にはメール確認が必要です。">地図づくりに参加するためのアカウントを作成します。登録にはメール確認が必要です。</span></p>
+  <p id="projectReturn" hidden><a id="projectReturnLink" referrerpolicy="no-referrer"></a></p>
+  <form id="registerForm">
+    <label><span data-site-i18n="参加プロジェクト（任意）">参加プロジェクト（任意）</span><select id="registrationProject" name="app_key" aria-describedby="registrationProjectHint" disabled><option value="" data-site-i18n="読み込み中…">読み込み中…</option></select></label>
+    <p id="registrationProjectHint" class="hint"><span data-site-i18n="既存のプロジェクトに参加する場合は参加先を選んでください。後で決めたり、メール確認後に自分のプロジェクトを作成したりすることもできます。新規プロジェクトの地図画面との連携は開発中です。">既存のプロジェクトに参加する場合は参加先を選んでください。後で決めたり、メール確認後に自分のプロジェクトを作成したりすることもできます。新規プロジェクトの地図画面との連携は開発中です。</span></p>
+    <label><span data-site-i18n="ユーザーID">ユーザーID</span><input name="userid" autocomplete="username" minlength="3" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,63}" required></label>
+    <p class="hint"><span data-site-i18n="英数字で始まる3〜64文字。英数字、ピリオド、アンダースコア、ハイフンを使えます。">英数字で始まる3〜64文字。英数字、ピリオド、アンダースコア、ハイフンを使えます。</span></p>
+    <label><span data-site-i18n="メールアドレス">メールアドレス</span><input name="email" type="email" autocomplete="email" maxlength="255" required></label>
+    <label><span data-site-i18n="パスワード">パスワード</span><input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+    <p class="hint"><span data-site-i18n="8文字以上で設定してください。">8文字以上で設定してください。</span></p>
+    <label><span data-site-i18n="パスワード（確認）">パスワード（確認）</span><input name="password_confirmation" type="password" autocomplete="new-password" minlength="8" required></label>
+    <label class="check"><input id="privacyAcknowledgement" type="checkbox" required><span><a href="privacy.html" target="_blank" rel="noopener"><span data-site-i18n="プライバシーポリシー">プライバシーポリシー</span></a><span data-site-i18n="と、投稿内容・ユーザーIDが公開され、アカウント削除後も公開済みの投稿データが残ることを確認しました。">と、投稿内容・ユーザーIDが公開され、アカウント削除後も公開済みの投稿データが残ることを確認しました。</span></span></label>
+    <button type="submit" disabled><span data-site-i18n="登録して確認メールを送る">登録して確認メールを送る</span></button>
+  </form>
+  <p id="status" role="status" aria-live="polite"></p>
+  <details id="resendSection">
+    <summary><span data-site-i18n="確認メールが届かない方">確認メールが届かない方</span></summary>
+  <form id="resendForm">
+    <p><span data-site-i18n="届かない場合は迷惑メールフォルダを確認し、時間をおいて再送してください。">届かない場合は迷惑メールフォルダを確認し、時間をおいて再送してください。</span></p>
+    <label><span data-site-i18n="登録したメールアドレス">登録したメールアドレス</span><input id="resendEmail" name="email" type="email" autocomplete="email" maxlength="255" required></label>
+    <button type="submit"><span data-site-i18n="確認メールを再送">確認メールを再送</span></button>
+  </form>
+  </details>
+</main>
+  <footer class="site-footer">
+    <div class="site-footer-inner">
+      <div class="site-footer-info">
+        <span class="site-footer-brand"><span data-site-i18n="コミュニティマップメーカー">コミュニティマップメーカー</span></span>
+        <p><span data-site-i18n="運営：Open Across Base">運営：Open Across Base</span><br><span data-site-i18n="問い合わせ：">問い合わせ：</span><a href="mailto:info@openacrossbase.net">info@openacrossbase.net</a></p>
+      </div>
+      <nav class="site-footer-links" aria-label="フッターメニュー" data-site-i18n-aria-label="フッターメニュー">
+        <a href="./"><span data-site-i18n="ホーム">ホーム</span></a>
+        <a href="./#projects" data-project-list-link><span data-site-i18n="プロジェクト一覧">プロジェクト一覧</span></a>
+        <a href="register.html"><span data-site-i18n="ユーザー登録">ユーザー登録</span></a>
+        <a href="privacy.html"><span data-site-i18n="プライバシーポリシー">プライバシーポリシー</span></a>
+      </nav>
+    </div>
+  </footer>
+<script>
+'use strict';
+const registerForm = document.getElementById('registerForm');
+const resendForm = document.getElementById('resendForm');
+const resendSection = document.getElementById('resendSection');
+const resendEmail = document.getElementById('resendEmail');
+const statusText = document.getElementById('status');
+const registrationAppKey = new URLSearchParams(location.search).get('app_key') || '';
+const registrationProject = document.getElementById('registrationProject');
+let registrationProjects = [];
+let registeredProject = null;
+let registrationCompleted = false;
+let projectsReady = false;
+function selectedProject() {
+  return registrationProjects.find(project => project.app_key === registrationProject.value) || null;
+}
+function updateProjectPresentation() {
+  const project = registrationCompleted ? registeredProject : selectedProject();
+  const name = project?.project_name || '';
+  document.getElementById('registrationHeading').textContent = name ? SiteLanguage.t('{name}に参加する', { name }) : SiteLanguage.t('ユーザー登録');
+  document.title = (name ? SiteLanguage.t('{name}に参加する', { name }) : SiteLanguage.t('ユーザー登録')) + SiteLanguage.t(' | コミュニティマップメーカー');
+  document.getElementById('registrationPurpose').textContent = name
+    ? SiteLanguage.t('{name}の地図づくりに参加するアカウントを作成します。登録にはメール確認が必要です。', { name })
+    : SiteLanguage.t('地図づくりに参加するためのアカウントを作成します。登録にはメール確認が必要です。');
+  const wrapper = document.getElementById('projectReturn');
+  const link = document.getElementById('projectReturnLink');
+  wrapper.hidden = true;
+  link.removeAttribute('href');
+  if (typeof project?.frontend_url !== 'string') return;
+  try {
+    const url = new URL(project.frontend_url);
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) return;
+    link.href = url.href;
+    link.textContent = SiteLanguage.t('{name}へ戻る', { name });
+    wrapper.hidden = false;
+  } catch { /* No link for an unavailable managed URL. */ }
+}
+registrationProject.addEventListener('change', () => {
+  updateProjectPresentation();
+  showStatus('');
+});
+async function loadRegistrationProjects() {
+  try {
+    const response = await fetch('auth/registration-projects.php', { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error('Project list unavailable');
+    const data = await response.json();
+    if (!Array.isArray(data.projects)) throw new Error('Invalid project list');
+    registrationProjects = data.projects.filter(project => project && typeof project.app_key === 'string' && typeof project.project_name === 'string');
+    registrationProject.replaceChildren(new Option(SiteLanguage.t('後で決める・自分でつくる'), ''));
+    for (const project of registrationProjects) {
+      registrationProject.add(new Option(project.project_name, project.app_key));
+    }
+    if (registrationAppKey) {
+      if (registrationProjects.some(project => project.app_key === registrationAppKey)) {
+        registrationProject.value = registrationAppKey;
+      } else {
+        const unavailable = new Option(SiteLanguage.t('指定されたプロジェクトには参加できません'), registrationAppKey);
+        unavailable.disabled = true;
+        registrationProject.add(unavailable);
+        registrationProject.value = registrationAppKey;
+        showStatus(SiteLanguage.t('指定されたプロジェクトは登録対象外です。参加先を選び直してください。'), true);
+      }
+    }
+    projectsReady = true;
+    registrationProject.disabled = false;
+    registerForm.querySelector('button').disabled = false;
+    updateProjectPresentation();
+  } catch (error) {
+    showStatus(SiteLanguage.t('参加プロジェクトを読み込めませんでした。ページを再読み込みしてください。'), true);
+  }
+}
+loadRegistrationProjects();
+async function post(path, body) {
+  const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(body) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data.code || `HTTP ${response.status}`);
+    error.errors = data.errors;
+    throw error;
+  }
+  return data;
+}
+function showStatus(message, error = false) {
+  statusText.textContent = message;
+  statusText.className = error ? 'error' : 'success';
+}
+registerForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!registerForm.reportValidity()) return;
+  if (!projectsReady || registrationProject.selectedOptions[0]?.disabled) {
+    showStatus(SiteLanguage.t('参加プロジェクトを選択してください。'), true);
+    return;
+  }
+  const fields = Object.fromEntries(new FormData(registerForm));
+  const submittedProject = selectedProject();
+  if (fields.password !== fields.password_confirmation) { showStatus(SiteLanguage.t('確認用パスワードが一致しません。'), true); return; }
+  const button = registerForm.querySelector('button');
+  button.disabled = true;
+  showStatus(SiteLanguage.t('登録中…'));
+  try {
+    const result = await post('auth/register.php', fields);
+    registeredProject = submittedProject;
+    registrationCompleted = true;
+    updateProjectPresentation();
+    resendEmail.value = fields.email;
+    registerForm.hidden = true;
+    if (result.verification_required) {
+      showStatus(result.verification_email_sent ? SiteLanguage.t('確認メールを送信しました。メール内のリンクを開いてください。') + (registeredProject ? SiteLanguage.t('確認後、') + registeredProject.project_name + SiteLanguage.t('からログインできます。') : '') : SiteLanguage.t('登録は受け付けましたが、メールを送信できませんでした。再送をお試しください。'), !result.verification_email_sent);
+      resendSection.open = true;
+    } else {
+      showStatus(SiteLanguage.t('登録が完了しました。') + (registeredProject?.project_name || SiteLanguage.t('利用するアプリ')) + SiteLanguage.t('からログインしてください。'));
+    }
+  } catch (error) {
+    if (error.message === 'validation_failed' && error.errors?.app_key) {
+      showStatus(SiteLanguage.t('このプロジェクトからは登録できません。利用するアプリの登録リンクを確認してください。'), true);
+      return;
+    }
+    if (error.message === 'validation_failed' && error.errors) {
+      const details = [];
+      if (error.errors.userid) details.push(SiteLanguage.t('ユーザーIDは半角英数字で始まる3〜64文字で入力してください。使える記号はピリオド、アンダースコア、ハイフンです。'));
+      if (error.errors.email) details.push(SiteLanguage.t('メールアドレスの形式を確認してください。'));
+      if (error.errors.password) {
+        const minimum = String(error.errors.password).match(/^Password must contain at least (\d+) characters and at most 4096 bytes\.$/)?.[1];
+        details.push(minimum
+          ? SiteLanguage.t('パスワードは') + minimum + SiteLanguage.t('文字以上、4096バイト以内で入力してください。')
+          : SiteLanguage.t('パスワードの文字数を確認してください。'));
+      }
+      if (error.errors.password_confirmation) details.push(SiteLanguage.t('確認用パスワードが一致しません。もう一度入力してください。'));
+      if (details.length) {
+        showStatus(details.join(' '), true);
+        return;
+      }
+    }
+    if (error.message === 'identity_already_registered') {
+      resendEmail.value = fields.email;
+      resendSection.open = true;
+    }
+    const messages = { identity_already_registered: SiteLanguage.t('ユーザーIDまたはメールアドレスは既に登録されています。メール確認がまだの場合は、下の欄から確認メールを再送してください。'), rate_limit_exceeded: SiteLanguage.t('操作が多すぎます。しばらく待ってから再度お試しください。'), validation_failed: SiteLanguage.t('入力内容を確認してください。'), registration_disabled: SiteLanguage.t('現在、ユーザー登録を受け付けていません。') };
+    showStatus(messages[error.message] || SiteLanguage.t('登録できませんでした。しばらくしてから再度お試しください。'), true);
+  } finally { fields.password = ''; fields.password_confirmation = ''; registerForm.elements.password.value = ''; registerForm.elements.password_confirmation.value = ''; button.disabled = false; }
+});
+resendForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = resendForm.querySelector('button');
+  button.disabled = true;
+  try {
+    const result = await post('auth/resend-verification.php', { identity: resendEmail.value.trim() });
+    showStatus(result.verification_email_sent ? SiteLanguage.t('再送を受け付けました。未確認の登録がある場合は、確認メールが届きます。') : SiteLanguage.t('メールを送信できませんでした。時間をおいて再送してください。'), !result.verification_email_sent);
+  } catch (error) {
+    showStatus(error.message === 'rate_limit_exceeded' ? SiteLanguage.t('再送まで少しお待ちください。') : SiteLanguage.t('再送できませんでした。時間をおいてお試しください。'), true);
+  } finally { button.disabled = false; }
+});
+</script>
+</body>
+</html>

@@ -8,8 +8,8 @@ use RuntimeException;
 final class AdminUserService
 {
     private const STATUSES = ['pending', 'active', 'disabled'];
-    private const ROLES = ['contributor', 'user', 'admin'];
-    private const PROJECT_ROLES = ['viewer', 'contributor', 'editor', 'project_admin'];
+    private const ROLES = ['user', 'admin'];
+    private const PROJECT_ROLES = ['viewer', 'contributor', 'editor', 'project_admin', 'banned'];
 
     public function __construct(
         private AdminUserRepositoryInterface $users,
@@ -28,7 +28,7 @@ final class AdminUserService
         $status = trim((string)($input['status'] ?? ''));
         $role = trim((string)($input['role'] ?? ''));
         $verified = trim((string)($input['verified'] ?? ''));
-        if ($status !== '' && !in_array($status, self::STATUSES, true)) throw new ValidationException(['status' => 'Invalid status filter.']);
+        if ($status !== '' && !in_array($status, [...self::STATUSES, 'deleted'], true)) throw new ValidationException(['status' => 'Invalid status filter.']);
         if ($role !== '' && !in_array($role, self::ROLES, true)) throw new ValidationException(['role' => 'Invalid role filter.']);
         if ($verified !== '' && !in_array($verified, ['yes', 'no'], true)) throw new ValidationException(['verified' => 'Verified filter must be yes or no.']);
         $projectId = (int)($input['project_id'] ?? 0);
@@ -51,6 +51,7 @@ final class AdminUserService
     public function create(array $input, int $adminUserId, string $clientIdentifier): array
     {
         $projects = $this->projects($input['projects'] ?? []);
+        $this->assertBanAllowed((string)($input['role'] ?? 'user'), $projects);
         $hasEmail = trim((string)($input['email'] ?? '')) !== '';
         $created = $hasEmail
             ? $this->auth->inviteUser($input, $clientIdentifier)
@@ -73,14 +74,15 @@ final class AdminUserService
 
     public function update(int $id, array $input, int $adminUserId): array
     {
-        $current = $this->find($id);
+        $current = $this->findEditable($id);
         $status = array_key_exists('status', $input) ? trim((string)$input['status']) : $current['status'];
         $role = array_key_exists('role', $input) ? trim((string)$input['role']) : $current['role'];
         if (!in_array($status, self::STATUSES, true)) throw new ValidationException(['status' => 'Status must be pending, active, or disabled.']);
-        if (!in_array($role, self::ROLES, true)) throw new ValidationException(['role' => 'Role must be contributor, user, or admin.']);
+        if (!in_array($role, self::ROLES, true)) throw new ValidationException(['role' => 'Role must be user or admin.']);
         $wasActiveAdmin = $current['status'] === 'active' && $current['role'] === 'admin';
         $willBeActiveAdmin = $status === 'active' && $role === 'admin';
         $projects = array_key_exists('projects', $input) ? $this->projects($input['projects']) : null;
+        $this->assertBanAllowed($role, $projects ?? $current['projects']);
         $this->transactions->run(function () use ($id, $status, $role, $projects, $adminUserId, $current, $wasActiveAdmin, $willBeActiveAdmin): void {
             if ($wasActiveAdmin && !$willBeActiveAdmin && $this->users->countActiveAdmins() <= 1) {
                 throw new LastAdminException('The last active admin cannot be disabled or demoted.');
@@ -91,6 +93,7 @@ final class AdminUserService
                 'status' => ['from' => $current['status'], 'to' => $status],
                 'role' => ['from' => $current['role'], 'to' => $role],
                 'project_ids' => $projects === null ? null : array_column($projects, 'project_id'),
+                'projects' => $projects,
             ]);
         });
         return $this->find($id);
@@ -98,7 +101,7 @@ final class AdminUserService
 
     public function resendVerification(int $id, int $adminUserId, string $clientIdentifier): array
     {
-        $this->find($id);
+        $this->findEditable($id);
         $result = $this->auth->resendVerificationForUser($id, $clientIdentifier);
         $this->audit->record($adminUserId, 'user.verification_resend', 'user', $id, [
             'email_sent' => (bool)$result['verification_email_sent'],
@@ -108,7 +111,7 @@ final class AdminUserService
 
     public function addEmail(int $id, array $input, int $adminUserId, string $clientIdentifier): array
     {
-        $this->find($id);
+        $this->findEditable($id);
         $result = $this->auth->addEmailForUser($id, $input, $clientIdentifier);
         $this->audit->record($adminUserId, 'user.email_add', 'user', $id, [
             'verification_email_sent' => (bool)$result['verification_email_sent'],
@@ -118,7 +121,7 @@ final class AdminUserService
 
     public function sendPasswordReset(int $id, int $adminUserId, string $clientIdentifier): array
     {
-        $this->find($id);
+        $this->findEditable($id);
         $result = $this->auth->sendPasswordResetForUser($id, $clientIdentifier);
         $this->audit->record($adminUserId, 'user.password_reset_send', 'user', $id, [
             'email_sent' => (bool)$result['reset_email_sent'],
@@ -128,10 +131,24 @@ final class AdminUserService
 
     public function setPassword(int $id, array $input, int $adminUserId): array
     {
-        $this->find($id);
+        $this->findEditable($id);
         $this->auth->setPasswordForUser($id, $input);
         $this->audit->record($adminUserId, 'user.password_set', 'user', $id);
         return $this->find($id);
+    }
+
+    private function findEditable(int $id): array
+    {
+        $user = $this->find($id);
+        if ($user['status'] === 'deleted') throw new AdminUserDeletedException('Deleted users are read-only.');
+        return $user;
+    }
+
+    private function assertBanAllowed(string $role, array $projects): void
+    {
+        if ($role === 'admin' && in_array('banned', array_column($projects, 'role'), true)) {
+            throw new ValidationException(['projects' => 'Global administrators cannot be banned from a project.']);
+        }
     }
 
     private function projects(mixed $value): array
@@ -167,3 +184,5 @@ final class AdminUserNotFoundException extends RuntimeException
 final class LastAdminException extends RuntimeException
 {
 }
+
+final class AdminUserDeletedException extends RuntimeException {}

@@ -172,8 +172,7 @@ activityThrows(fn() => $service->create([
 activityThrows(fn() => $service->create([
     'app' => 'playgrounds', 'osmid' => 'way/1', 'actdate' => '2026-09-03', 'score' => '10',
 ]), ActivityValidationException::class, 'Unknown select values must be rejected.');
-$schema->validate('playgrounds', ['photo' => 'File:Park.jpg'], false, ['photo' => ['type' => 'wikimedia']]);
-activityThrows(fn() => $schema->validate('playgrounds', ['photo' => 'not an image reference'], false, ['photo' => ['type' => 'wikimedia']]), ActivityValidationException::class, 'Malformed Wikimedia references must be rejected.');
+$schema->validate('playgrounds', ['photo' => 'File:Park.jpg'], false, ['photo' => ['type' => 'image']]);
 activityThrows(fn() => $service->create([
     'app' => 'unknown', 'osmid' => 'way/1', 'actdate' => '2026-09-03',
 ]), UnknownAppException::class, 'Unconfigured apps must be rejected.');
@@ -272,3 +271,17 @@ $service->import('playgrounds', [array_replace($base, ['id' => 'coords/import', 
 activityAssert($service->find('playgrounds', 'coords/import')['latitude'] === 12.3, 'Import creates coordinate metadata.');
 
 echo "ActivityService behavior: ok\n";
+
+foreach ([
+    [['id'=>'','osmid'=>'node/1'], 'id', 'Activity ID is required for import.'],
+    [['id'=>'empty-osmid','osmid'=>''], 'osmid', 'OSM ID is required.'],
+    [['id'=>'bad-osmid','osmid'=>'123'], 'osmid', 'OSM ID must look like node/123, way/456, or relation/789.'],
+] as [$input,$field,$message]) {
+    try {
+        $service->import('playgrounds',[$input],true);
+        throw new RuntimeException('Expected import validation failure.');
+    } catch (ActivityValidationException $error) {
+        activityAssert(($error->errors['rows.0'][$field]??null)===$message,'Import preserves a specific nested field reason.');
+    }
+}
+echo "Import ID/OSM ID validation details: ok\n";

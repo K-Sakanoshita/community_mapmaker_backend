@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <script src="../site-messages.js?v=20261027-project-settings"></script>
+  <script src="../site-language.js?v=20261024-language"></script>
+  <link rel="icon" href="../favicon.ico?v=20261024" sizes="16x16 32x32 48x48">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg?v=20261024">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>プロジェクト管理 | コミュニティマップメーカー</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/tabulator-tables@6.5.2/dist/css/tabulator.min.css" integrity="sha384-7L13yWDATAJeK/mNTrYjb3Z8l08N1iGKbO9mSeSdlqR91llnpd0c4Y8wPznKlHCh" crossorigin="anonymous">
+  <link rel="stylesheet" href="../theme.css?v=20261024">
+  <link rel="stylesheet" href="admin.css?v=20261027-bulk-activities">
+  <link rel="stylesheet" href="../site-header.css?v=20261024-language">
+  <link rel="stylesheet" href="../site-footer.css?v=20261024">
+  <script src="../site-session.js?v=20261024-username-link" defer></script>
+</head>
+<body class="site-page">
+  <header class="site-header" data-session-managed="admin">
+    <a class="brand" href="../" aria-label="コミュニティマップメーカー ホーム"><img class="brand-symbol" src="../cMapmaker.png" alt="" width="500" height="500"><span>コミュニティマップメーカー</span></a>
+    <nav class="header-links" aria-label="サイトメニュー">
+      <a id="headerProjectListLink" class="project-list-link" href="../#projects" data-project-list-link>プロジェクト一覧</a>
+      <a id="headerRegistrationLink" href="../register.html">ユーザー登録</a>
+      <a id="headerLoginLink" class="login-link" href="./">ログイン <span aria-hidden="true">↗</span></a>
+      <div id="headerSession" class="session-actions" hidden>
+        <a id="currentAdmin" class="session-user" href="../mypage.html"></a>
+        <button id="logoutButton" class="session-logout" type="button">ログアウト</button>
+      </div>
+    </nav>
+  </header>
+  <div id="sessionLoading" class="login-screen session-loading" role="status" aria-live="polite">ログイン状態を確認しています…</div>
+  <section id="loginScreen" class="login-screen" aria-labelledby="loginTitle" hidden>
+    <form id="loginForm" class="login-card card shadow p-4">
+      <div class="login-brand">
+        <p class="eyebrow">Community Map Maker</p>
+        <h1 id="loginTitle">プロジェクト管理</h1>
+        <p>アカウントでログインしてください。</p>
+      </div>
+      <div class="login-fields">
+        <label>ユーザーID<input class="form-control" id="userid" autocomplete="username" autofocus required></label>
+        <label>パスワード<input class="form-control" id="password" type="password" autocomplete="current-password" required></label>
+        <button id="connectButton" class="btn btn-success" type="submit">ログイン</button>
+      </div>
+      <p class="signup-link"><a href="../">ポータルへ戻る</a> · <a href="../register.html">新規ユーザー登録</a></p>
+      <p id="loginStatus" class="login-status text-center small" role="status" aria-live="polite">認証情報を入力してください。</p>
+    </form>
+  </section>
+
+  <nav id="adminHeader" class="site-breadcrumbs site-breadcrumbs--container" aria-label="現在の位置" hidden>
+    <ol>
+      <li><a href="../">ポータル</a></li>
+      <li><a id="navigationProjects" href="../#projects" data-view="projects">プロジェクト一覧</a></li>
+      <li id="navigationDetailItem" hidden><a id="navigationDetail" href="?view=detail" data-view="detail">プロジェクト詳細</a></li>
+      <li id="navigationCurrentItem" hidden><span id="navigationCurrent" aria-current="page"></span></li>
+    </ol>
+  </nav>
+
+  <main id="adminMain" hidden>
+
+    <section id="createView" class="view" hidden>
+      <div class="section-header mb-3"><h1>プロジェクトを作成</h1></div>
+      <button class="btn btn-success" id="newProjectButton" type="button" disabled>プロジェクトを作成</button>
+    </section>
+
+    <section id="detailView" class="view" hidden>
+      <div class="section-header mb-3"><h1>プロジェクト詳細</h1></div>
+      <div id="projectDetailContent"></div>
+    </section>
+
+    <section id="trashView" class="view" hidden>
+      <div class="section-header mb-3">
+        <h1>削除済みデータ管理</h1>
+        <p class="section-desc">復元するとプロジェクト設定、投稿データ、ユーザー割当が再び利用できます。物理削除すると関連データも完全に削除します。</p>
+      </div>
+      <p id="trashStatus" role="status" aria-live="polite"></p>
+      <div class="table-responsive">
+        <table class="table table-striped table-hover table-bordered align-middle trash-table">
+          <thead><tr><th>プロジェクト</th><th>app_key</th><th>削除日時 (UTC)</th><th>投稿データ</th><th>ユーザー割当</th><th>操作</th></tr></thead>
+          <tbody id="trashProjectsBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="columnsView" class="view" hidden>
+      <div class="section-header detail-view-header d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+        <div><h1>プロジェクト設定</h1></div>
+      </div>
+      <div class="toolbar project-settings-toolbar d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3" aria-label="プロジェクト設定の操作">
+        <button class="btn btn-success activity-action-button" id="saveColumnsButton" type="button" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3h14l3 3v15H3V3h1Z"/><path d="M7 3v7h10V3M7 21v-8h10v8M14 3v5"/></svg><span>設定を保存</span></button>
+        <div id="projectManagementActions" class="project-management-actions d-flex flex-wrap gap-2"></div>
+      </div>
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-3 p-3 border rounded bg-white">
+        <div class="project-name-field"><div class="project-name-heading"><label for="projectName">プロジェクト名</label><span class="badge text-bg-light border font-monospace project-key-badge">KEY: <span id="columnsProjectKey"></span></span></div><input class="form-control" id="projectName" maxlength="255"></div>
+        <label class="project-url-field">フロントエンドURL<input class="form-control" id="projectFrontendUrl" type="url" maxlength="2048" placeholder="https://example.jp/map/"></label>
+        <label class="check-label"><input class="form-check-input" id="projectFrontendPublic" type="checkbox"> ポータルに公開</label>
+        <label class="check-label"><input class="form-check-input" id="projectRecruiting" type="checkbox" title="ポータル公開中に参加を受け付けます。"> メンバー募集中</label>
+      </div>
+      <details class="mb-3 p-3 border rounded bg-white" id="pageRenderingSettings">
+        <summary>SPAのサーバーレンダリング支援</summary>
+        <div class="mt-3">
+          <label class="check-label"><input class="form-check-input" id="pageRenderingEnabled" type="checkbox"> サーバーレンダリング支援を有効にする</label>
+          <p class="small text-muted mt-2">公開中のプロジェクトで利用できます。Cloudflare Workersの設定と、フロントエンドの個別ページURLへの対応が別途必要です。</p>
+          <label class="d-block mb-2">ページのパス<input class="form-control" id="pageRenderingPath" maxlength="512" placeholder="/parks/{osm_type}/{osm_id}"></label>
+          <label class="d-block mb-2">タイトル<input class="form-control" id="pageRenderingTitle" maxlength="255" placeholder="{name} | {project_name}"></label>
+          <label class="d-block mb-2">共通の説明文<textarea class="form-control" id="pageRenderingDescription" maxlength="1000" rows="2"></textarea></label>
+          <label class="d-block">共通のOGP画像URL<input class="form-control" id="pageRenderingImage" type="url" maxlength="2048" placeholder="https://example.jp/ogp.png"></label>
+        </div>
+      </details>
+      <div class="column-definition-toolbar">
+        <h2>カラム定義</h2>
+        <div class="d-flex flex-wrap gap-2">
+          <button class="btn btn-outline-secondary" id="addColumnButton" type="button">カラムを追加</button>
+          <button class="btn btn-outline-secondary" id="exportColumnsButton" type="button">JSONをエクスポート</button>
+          <button class="btn btn-outline-secondary" id="importColumnsButton" type="button">JSONをインポート</button>
+          <input id="importColumnsFile" type="file" accept=".json,application/json" hidden>
+        </div>
+      </div>
+      <p class="section-desc">左端のハンドルをドラッグして順序を変更できます。カラムを定義から削除しても、既存の投稿データは削除されません。</p>
+      <div id="columnsTable" class="columns-table-wrap" aria-label="カラム定義表"></div>
+    </section>
+
+    <section id="activitiesView" class="view" hidden>
+      <div class="section-header detail-view-header mb-3">
+        <div><h1>投稿データ</h1><p class="activity-required-note"><span aria-hidden="true">*</span> は入力必須です（OSM ID・カラム定義の必須項目）。投稿IDは空欄なら自動発行されます。</p></div>
+      </div>
+      <div class="toolbar activity-toolbar mb-3" aria-label="投稿データの操作">
+        <div class="activity-context-row">
+        <div class="activity-project-block">
+          <div class="activity-project-controls">
+            <label>プロジェクト<select class="form-select" id="appSelect"></select></label>
+            <a id="activitiesFrontendLink" class="btn btn-outline-success activity-frontend-link" target="_blank" rel="noopener noreferrer" aria-label="選択中のプロジェクトの地図を開く" title="地図を見る" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg></a>
+          </div>
+        </div>
+
+          <label class="search">全列検索<input class="form-control" id="search" type="search" placeholder="表示中の全列を検索"></label>
+        </div>
+        <div class="activity-actions-row">
+          <div class="activity-edit-actions">
+            <button class="btn btn-outline-secondary activity-action-button" id="addButton" type="button" aria-label="行を追加" title="行を追加"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>行を追加</span></button>
+            <button class="btn btn-success activity-action-button" id="saveAllButton" type="button" aria-label="変更を保存" title="変更を保存" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3h14l3 3v15H3V3h1Z"/><path d="M7 3v7h10V3M7 21v-8h10v8M14 3v5"/></svg><span>変更を保存</span><span id="dirtyCount" aria-hidden="true"></span></button>
+            <button class="btn btn-outline-secondary activity-action-button" id="discardButton" type="button" aria-label="変更を破棄" title="変更を破棄" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M5 6l1 14h12l1-14M10 10v7M14 10v7"/></svg><span>変更を破棄</span></button>
+          </div>
+          <div class="activity-data-actions">
+            <details class="activity-file-menu">
+          <summary class="btn btn-outline-secondary activity-action-button" aria-label="データ入出力" title="データ入出力"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 10V3m0 0L5 6m3-3 3 3M16 14v7m0 0-3-3m3 3 3-3M4 12h16"/></svg><span>取り込み・出力</span></summary>
+          <div class="activity-file-menu-items">
+            <label class="btn btn-outline-secondary import">ファイルを取り込む<input class="form-control" id="importFile" type="file" accept="application/json,text/csv,.json,.csv"></label>
+            <a id="jsonExport" class="btn btn-outline-secondary" download>JSONを出力</a>
+            <a id="csvExport" class="btn btn-outline-secondary" download>CSVを出力</a>
+          </div>
+        </details>
+            <div class="activity-danger-actions">
+              <button class="btn btn-outline-danger activity-action-button" id="deleteAllActivitiesButton" type="button" hidden>すべての投稿を削除</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="activity-load-progress">
+        <p id="activityLoadStatus" role="status" aria-live="polite"></p>
+        <button id="activityRetryButton" class="btn btn-sm btn-outline-secondary" type="button" hidden>再読み込み</button>
+      </div>
+      <p id="csvImportStatus" class="hint form-text" role="status" aria-live="polite"></p>
+      <div id="activityTable" class="spreadsheet-wrap" aria-label="投稿データの表"></div>
+    </section>
+
+    <section id="usersView" class="view" hidden>
+      <div class="section-header d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+        <div><h1 id="usersTitle">ユーザー管理</h1><p id="usersDescription" class="section-desc">アカウント状態、権限、メール確認、投稿状況を管理します。</p></div>
+      </div>
+      <div class="toolbar d-flex flex-wrap align-items-end gap-2 mb-3" aria-label="ユーザー検索">
+        <label class="search"><span id="usersSearchLabel">ユーザーID・メール</span><input class="form-control" id="usersSearch" type="search" placeholder="検索"></label>
+        <label>状態<select class="form-select" id="userStatusFilter"><option value="">すべて</option><option value="pending">pending</option><option value="active">active</option><option value="disabled">disabled</option></select></label>
+        <label>メール確認<select class="form-select" id="userVerifiedFilter"><option value="">すべて</option><option value="yes">確認済み</option><option value="no">未確認</option></select></label>
+        <label>ロール<select class="form-select" id="userRoleFilter"><option value="">すべて</option><option value="user">user</option><option value="admin">admin</option></select></label>
+        <label>プロジェクト<select class="form-select" id="userProjectFilter"><option value="">すべて</option></select></label>
+        <button class="btn btn-outline-secondary" id="usersLoadButton" type="button">検索</button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-striped table-hover table-bordered align-middle users-table">
+          <thead><tr><th>ユーザーID・状態</th><th>メール</th><th>ロール</th><th>メール確認</th><th>最終ログイン</th><th>所有プロジェクト数</th><th>所属プロジェクト数</th><th>操作</th></tr></thead>
+          <tbody id="usersBody"></tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-end align-items-center gap-2 mt-3"><button class="btn btn-outline-secondary" id="usersPrevButton" type="button">前へ</button><span id="usersPageInfo"></span><button class="btn btn-outline-secondary" id="usersNextButton" type="button">次へ</button></div>
+      <details id="deletedUsersSection" class="deleted-users-section" hidden>
+        <summary>削除済みユーザー</summary>
+        <p class="user-section-description">復活または完全削除できます。完全削除しても投稿とプロジェクトは残りますが、アカウントと参加記録は削除されます。</p>
+        <p id="deletedUsersStatus" role="status" aria-live="polite"></p>
+        <button id="deletedUsersRetryButton" class="btn btn-outline-secondary mb-3" type="button" hidden>再試行</button>
+      <div class="table-responsive">
+        <table class="table table-striped table-hover table-bordered align-middle users-table">
+          <thead><tr><th>ユーザーID・状態</th><th>メール</th><th>ロール</th><th>メール確認</th><th>最終ログイン</th><th>所有プロジェクト数</th><th>所属プロジェクト数</th><th>操作</th></tr></thead>
+          <tbody id="deletedUsersBody"></tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-end align-items-center gap-2 mt-3"><button class="btn btn-outline-secondary" id="deletedUsersPrevButton" type="button">前へ</button><span id="deletedUsersPageInfo"></span><button class="btn btn-outline-secondary" id="deletedUsersNextButton" type="button">次へ</button></div>
+      </details>
+      <button class="btn btn-success user-add-fab" id="newUserButton" type="button" aria-label="ユーザー追加" title="ユーザー追加" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+    </section>
+  </main>
+  <footer class="site-footer">
+    <div class="site-footer-inner">
+      <div class="site-footer-info">
+        <span class="site-footer-brand">Community Map Maker</span>
+        <p>運営：Open Across Base<br>問い合わせ：<a href="mailto:info@openacrossbase.net">info@openacrossbase.net</a></p>
+      </div>
+      <nav class="site-footer-links" aria-label="フッターメニュー">
+        <a href="../">ホーム</a>
+        <a href="../#projects">プロジェクト一覧</a>
+        <a href="../register.html">ユーザー登録</a>
+        <a href="../privacy.html">プライバシーポリシー</a>
+      </nav>
+    </div>
+  </footer>
+
+  <dialog id="projectAdminsDialog" class="app-dialog" aria-labelledby="projectAdminsTitle">
+    <div class="dialog-heading"><h2 id="projectAdminsTitle">プロジェクト管理者</h2><button class="dialog-close" type="button" data-close-dialog="projectAdminsDialog" aria-label="閉じる" title="閉じる">✕</button></div>
+    <p id="projectAdminsName"></p>
+    <p class="hint form-text">登録済みのユーザーIDを指定して、管理者を追加できます。解除したユーザーは編集者になります。</p>
+    <form id="projectAdminsForm">
+      <fieldset id="projectAdminsControls" style="border:0;padding:0;margin:0;min-width:0">
+        <label class="form-group mb-3">追加するユーザーID<input class="form-control" id="projectAdminUserid" minlength="3" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,63}" autocomplete="off" autocapitalize="none" required></label>
+        <button class="btn btn-success" type="submit">管理者を追加</button>
+      </fieldset>
+    </form>
+    <p id="projectAdminsStatus" class="hint form-text" role="status" aria-live="polite"></p>
+    <ul id="projectAdminsList" class="list-group my-3"></ul>
+    <div class="d-flex justify-content-end"><button class="btn btn-secondary" type="button" data-close-dialog="projectAdminsDialog">閉じる</button></div>
+  </dialog>
+
+  <dialog id="projectDialog" class="app-dialog">
+    <form id="projectForm" method="dialog">
+      <h2>プロジェクトを作成</h2>
+      <label class="form-group mb-3">プロジェクト名 <span class="text-danger">必須</span><input class="form-control" id="newProjectName" maxlength="255" required></label>
+      <label class="form-group mb-3">app_key <span class="text-danger">必須</span><input class="form-control" id="newAppKey" pattern="[a-z0-9][a-z0-9_\-]{0,63}" maxlength="64" autocapitalize="none" autocomplete="off" spellcheck="false" required><span class="hint form-text">入力した英大文字は自動で小文字になります。小文字英数字、_、- が使えます（作成後は変更できません）。</span></label>
+      <label class="form-group mb-3">フロントエンドURL<input class="form-control" id="newProjectFrontendUrl" type="url" maxlength="2048" placeholder="https://example.jp/map/"><span class="hint form-text">未設定ならリンクは表示しません。</span></label>
+      <label class="check-label"><input class="form-check-input" id="newProjectFrontendPublic" type="checkbox"> ポータルに公開する</label>
+      <div class="d-flex justify-content-end gap-2 mt-3"><button class="btn btn-outline-secondary" type="button" data-close-dialog="projectDialog">キャンセル</button><button class="btn btn-success" value="create">作成</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="csvDialog" class="app-dialog">
+    <form id="csvForm" method="dialog">
+      <h2>CSV import確認</h2>
+      <p id="csvSummary"></p>
+      <div id="csvMissing"></div>
+      <label id="addMissingLabel" class="check-label"><input class="form-check-input" id="addMissingColumns" type="checkbox" checked> 未定義カラム・型・選択肢をSchemaへ反映する</label>
+      <p class="hint form-text">先にdry-runを実行済みです。Importは投稿ID単位で追加・更新します。</p>
+      <div class="d-flex justify-content-end gap-2 mt-3"><button class="btn btn-outline-secondary" type="button" data-close-dialog="csvDialog">キャンセル</button><button class="btn btn-success" value="import">Import実行</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="newUserDialog" class="app-dialog">
+    <form id="newUserForm" method="dialog">
+      <div class="dialog-heading"><h2>ユーザー追加</h2><button class="dialog-close" type="button" data-close-dialog="newUserDialog" aria-label="キャンセル" title="キャンセル">✕</button></div>
+      <p id="newUserModeHint" class="hint form-text">メールなしの場合は、管理者が設定した初期パスワードですぐに利用できます。</p>
+      <label class="form-group mb-3">ユーザーID <span class="text-danger">必須</span><input class="form-control" id="newUserId" minlength="3" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,63}" required></label>
+      <label class="form-group mb-3">メール（任意）<input class="form-control" id="newUserEmail" type="email" maxlength="255"><span class="hint form-text">入力すると、初期パスワードの代わりにパスワード設定メールを送ります。</span></label>
+      <div id="newUserPasswordFields" class="password-fields">
+        <label class="form-group mb-3">初期パスワード <span class="text-danger">必須・8文字以上</span><input class="form-control" id="newUserPassword" type="password" minlength="8" maxlength="4096" autocomplete="new-password"></label>
+        <label class="form-group mb-3">初期パスワード（確認） <span class="text-danger">必須</span><input class="form-control" id="newUserPasswordConfirmation" type="password" minlength="8" maxlength="4096" autocomplete="new-password"></label>
+      </div>
+      <label class="form-group mb-3">ロール<select class="form-select" id="newUserRole"><option value="user">user</option><option value="admin">admin</option></select></label>
+      <fieldset><legend>利用プロジェクト</legend><div id="newUserProjects" class="project-assignments"></div></fieldset>
+      <div class="d-flex justify-content-end gap-2 mt-3"><button class="btn btn-outline-secondary" type="button" data-close-dialog="newUserDialog">キャンセル</button><button class="btn btn-success" id="newUserSubmitButton" value="create">追加</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="userDialog" class="app-dialog user-modal">
+    <form id="userForm" method="dialog">
+      <div class="dialog-heading"><h2 id="userDialogTitle">ユーザー詳細</h2><button class="dialog-close" type="button" data-close-dialog="userDialog" aria-label="閉じる" title="閉じる">✕</button></div>
+      <dl id="userMetadata" class="detail-grid"></dl>
+      <div class="user-edit-grid">
+        <label class="form-group mb-3">状態<select class="form-select" id="editUserStatus"><option value="pending">pending</option><option value="active">active</option><option value="disabled">disabled</option><option value="deleted" disabled>削除済み</option></select></label>
+        <label class="form-group mb-3">ロール<select class="form-select" id="editUserRole"><option value="user">user</option><option value="admin">admin</option></select></label>
+      </div>
+      <section class="user-detail-section"><h3>利用プロジェクト</h3><p class="muted">プロジェクトにチェックを入れ、権限を「参加禁止」にして保存すると、参加・投稿・管理を禁止します。解除するには権限を変更するか、チェックを外して保存してください。全体管理者は対象外です。</p><div id="editUserProjects" class="project-assignments"></div></section>
+      <section id="userAddEmailSection" class="user-detail-section" hidden>
+        <label class="user-email-field">メールアドレス<input class="form-control" id="addUserEmail" type="email" maxlength="255" autocomplete="email" required></label>
+        <button class="btn btn-outline-success mt-3" id="addUserEmailButton" type="button">登録して確認メールを送信</button>
+      </section>
+      <section id="userMailActions" class="user-detail-section" hidden>
+        <h3>メールで手続き</h3>
+        <p class="user-section-description">送信先：<strong id="userMailAddress"></strong>（登録済みメールアドレス）</p>
+        <p id="userMailDescription" class="user-section-description"></p>
+        <div class="user-actions">
+          <button class="btn btn-outline-secondary" id="resendVerificationButton" type="button">確認メールを再送</button>
+        </div>
+      </section>
+      <section class="user-detail-section">
+        <h3>パスワード</h3>
+        <button class="btn btn-outline-secondary" id="userPasswordResetButton" type="button">パスワードを再設定</button>
+      </section>
+      <p id="deletedUserNotice" class="user-section-description" hidden>このユーザーは削除済みです。記録の参照のみ可能です。</p>
+      <section id="deleteUserSection" class="user-detail-section" hidden>
+        <h3>ユーザーを削除</h3>
+        <p class="user-section-description">ログインとプロジェクト操作を禁止します。アカウント・投稿・参加記録は残ります。対象のユーザーIDを正確に入力してください。削除後も「削除済みユーザー」から復活できます。</p>
+        <label class="user-email-field">確認用ユーザーID<input class="form-control" id="deleteUserConfirmation" type="text" maxlength="64" autocomplete="off"></label>
+        <button class="btn btn-outline-danger mt-3" id="deleteUserButton" type="button" disabled>ユーザーを削除</button>
+      </section>
+      <p id="userEmailStatus" class="user-email-status" role="status" aria-live="polite"></p>
+      <div class="user-dialog-footer d-flex justify-content-end gap-2"><button class="btn btn-success" value="save" formnovalidate>変更を保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="bulkActivityDeleteDialog" class="app-dialog user-modal" aria-labelledby="bulkActivityDeleteTitle" aria-describedby="bulkActivityDeleteDescription">
+    <form id="bulkActivityDeleteForm">
+      <div class="dialog-heading"><h2 id="bulkActivityDeleteTitle">すべての投稿を削除</h2><button class="dialog-close" id="bulkActivityDeleteClose" type="button" data-close-dialog="bulkActivityDeleteDialog" aria-label="閉じる">✕</button></div>
+      <p id="bulkActivityDeleteProject" class="bulk-activity-project"></p>
+      <p id="bulkActivityDeleteDescription">検索・絞り込みや読み込み済みの件数に関係なく、このプロジェクトの全投稿が対象です。投稿内容を保持したまま、通常の一覧・マップから非表示にします。プロジェクト設定・カラム定義・参加ユーザーは維持します。</p>
+      <p id="bulkActivityDeleteCount" role="status" aria-live="polite"></p>
+      <label class="user-email-field">確認のためプロジェクトKEYを入力<input class="form-control" id="bulkActivityDeleteKey" type="text" maxlength="64" autocomplete="off" required></label>
+      <div class="user-dialog-footer d-flex flex-wrap justify-content-end gap-2">
+        <button class="btn btn-outline-secondary" id="bulkActivityDeleteRetry" type="button" hidden>件数を再確認</button>
+        <button class="btn btn-outline-secondary" id="bulkActivityDeleteCancel" type="button" data-close-dialog="bulkActivityDeleteDialog">キャンセル</button>
+        <button class="btn btn-danger" id="bulkActivityDeleteConfirm" type="submit" disabled>すべての投稿を削除</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="importColumnsDialog" class="app-dialog user-modal" aria-labelledby="importColumnsTitle">
+    <div class="dialog-heading"><h2 id="importColumnsTitle">カラム定義のインポート</h2><button class="dialog-close" type="button" data-close-dialog="importColumnsDialog" aria-label="閉じる">✕</button></div>
+    <p>現在のカラム定義をファイルの内容で置き換えます。プロジェクト名・URL・権限・投稿データは変更しません。読み込み後に確認し、「設定を保存」で反映してください。</p>
+    <p id="importColumnsSummary" class="column-import-summary"></p>
+    <pre id="importColumnsChanges" class="column-import-changes"></pre>
+    <div class="d-flex justify-content-end gap-2">
+      <button class="btn btn-outline-secondary" type="button" data-close-dialog="importColumnsDialog">キャンセル</button>
+      <button class="btn btn-success" id="applyColumnsImportButton" type="button">カラム定義を読み込む</button>
+    </div>
+  </dialog>
+
+  <dialog id="passwordResetDialog" class="app-dialog user-modal" aria-labelledby="passwordResetTitle">
+    <div class="dialog-heading"><div class="password-reset-heading"><h2 id="passwordResetTitle">パスワード再設定</h2><p>ユーザーID：<strong id="passwordResetUserid"></strong></p></div><button class="dialog-close" type="button" data-close-dialog="passwordResetDialog" aria-label="閉じる" title="閉じる">✕</button></div>
+    <section id="passwordResetEmailSection" class="password-reset-section" hidden>
+      <h3>メールで再設定</h3>
+      <p class="user-section-description">送信先：<strong id="passwordResetEmailAddress"></strong></p>
+      <button class="btn btn-outline-secondary" id="sendPasswordResetButton" type="button">パスワード再設定メールを送信</button>
+    </section>
+    <section class="password-reset-section">
+      <h3>管理者がパスワードを設定</h3>
+      <p class="user-section-description">新しいパスワードを直接設定します。メールアドレスのないユーザーにも利用できます。</p>
+      <p id="passwordResetHint" class="hint form-text">8文字以上で入力し、確認欄にも同じパスワードを入力してください。</p>
+      <div class="password-reset-grid">
+        <label class="form-group mb-3"><span>新しいパスワード</span><input class="form-control" id="editUserPassword" aria-describedby="passwordResetHint" type="password" minlength="8" maxlength="4096" autocomplete="new-password"></label>
+        <label class="form-group mb-3"><span>新しいパスワード（確認）</span><input class="form-control" id="editUserPasswordConfirmation" aria-describedby="passwordResetHint" type="password" minlength="8" maxlength="4096" autocomplete="new-password"></label>
+      </div>
+      <div class="password-reset-actions"><p id="userPasswordStatus" class="hint form-text" role="status" aria-live="polite"></p><button class="btn btn-success" id="setUserPasswordButton" type="button">新しいパスワードを設定</button></div>
+    </section>
+  </dialog>
+
+  <dialog id="deletedUserActionDialog" class="app-dialog user-modal" aria-labelledby="deletedUserActionTitle" aria-describedby="deletedUserActionDescription">
+    <form id="deletedUserActionForm">
+      <div class="dialog-heading"><h2 id="deletedUserActionTitle"></h2><button class="dialog-close" type="button" data-close-dialog="deletedUserActionDialog" aria-label="閉じる" title="閉じる">✕</button></div>
+      <p id="deletedUserActionTarget" class="deleted-user-target"></p>
+      <p id="deletedUserActionDescription" class="user-section-description"></p>
+      <label class="user-email-field">確認用ユーザーID<input class="form-control" id="deletedUserActionConfirmation" type="text" maxlength="64" autocomplete="off" required></label>
+      <div class="user-dialog-footer d-flex justify-content-end gap-2">
+        <button class="btn btn-outline-secondary" type="button" data-close-dialog="deletedUserActionDialog">キャンセル</button>
+        <button class="btn" id="deletedUserActionSubmit" type="submit" disabled></button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="statusToast" class="status-toast" popover="manual" hidden>
+    <p id="status" role="status" aria-live="polite" aria-atomic="true"></p>
+  </div>
+  <script src="https://unpkg.com/tabulator-tables@6.5.2/dist/js/tabulator.min.js" integrity="sha384-ZlfxHB5fIn8MOAuKJe8YBMi7snQXYvhy+0b3K4rGBBY2UvrJwho2jciJ5NKt0WtC" crossorigin="anonymous" defer></script>
+  <script src="i18n.js?v=20261029-page-rendering" defer></script>
+  <script src="../project-leave.js?v=20261024" defer></script>
+  <script src="column-transfer.js?v=20261108-system-ids" defer></script>
+  <script src="admin.js?v=20261108-system-ids" defer></script>
+</body>
+</html>

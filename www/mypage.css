@@ -1,0 +1,23 @@
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--cmm-background); color: var(--cmm-text); font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; }
+main { width: 100%; max-width: var(--cmm-page-max-width); margin: 0 auto; padding: 24px var(--cmm-page-gutter) 64px; flex: 1; }
+h1 { margin: 32px 0; font-size: clamp(1.7rem, 4vw, 2.2rem); }
+h2 { margin: 0 0 12px; font-size: 1.25rem; }
+p { line-height: 1.7; }
+a { color: var(--cmm-accent); }
+.description, .project-note { color: var(--cmm-muted); }
+.my-projects { list-style: none; margin: 24px 0; padding: 0; display: grid; gap: 12px; }
+.my-project { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; padding: 24px; border: 1px solid var(--cmm-border-soft); background: var(--cmm-surface); border-radius: 12px; }
+.project-info { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
+.project-info h3 { margin: 0 0 8px; font-size: 1.1rem; }
+.project-info p { margin: 4px 0; font-size: .9rem; }
+.project-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+button, .button { display: inline-block; padding: 10px 16px; border: 1px solid var(--cmm-border); border-radius: 6px; background: var(--cmm-surface); color: var(--cmm-text-secondary); font: inherit; line-height: 1.5; text-decoration: none; cursor: pointer; }
+button:hover, .button:hover { background: var(--cmm-surface-soft); }
+button:disabled { color: var(--cmm-text-disabled); background: var(--cmm-surface-disabled); cursor: default; }
+.leave-button { border-color: var(--cmm-accent); color: var(--cmm-accent); }
+a:focus-visible, button:focus-visible { outline: 3px solid var(--cmm-accent-hover); outline-offset: 3px; }
+.pagination { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
+.error { color: var(--cmm-accent); }
+[hidden] { display: none !important; }
+@media (max-width: 600px) { .my-project { padding: 18px; gap: 12px; } .project-actions { width: 100%; } .project-actions button, .project-actions .button { flex: 1 1 auto; text-align: center; } }

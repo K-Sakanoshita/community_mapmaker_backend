@@ -62,6 +62,7 @@ CREATE TABLE activities (
     KEY idx_activities_app_osmid (app_key, osmid),
     KEY idx_activities_app_active_lon_lat (app_key, is_deleted, longitude, latitude),
     KEY idx_activities_app_updated (app_key, updated_at),
+    KEY idx_activities_app_active_id (app_key, is_deleted, id),
     KEY idx_activities_created_by (created_by_user_id, created_at),
     KEY idx_activities_updated_by (updated_by_user_id, updated_at),
     CONSTRAINT fk_activities_created_by FOREIGN KEY (created_by_user_id)
@@ -76,6 +77,8 @@ CREATE TABLE projects (
     project_name VARCHAR(255) NOT NULL,
     frontend_url VARCHAR(2048) NULL,
     frontend_public TINYINT(1) NOT NULL DEFAULT 0,
+    recruiting TINYINT(1) NOT NULL DEFAULT 0,
+    page_rendering_json JSON NULL,
     schema_json JSON NOT NULL,
     enabled TINYINT(1) NOT NULL DEFAULT 1,
     is_deleted TINYINT(1) NOT NULL DEFAULT 0,

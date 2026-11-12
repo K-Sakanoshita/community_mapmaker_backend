@@ -87,7 +87,18 @@ final class ActivitySchema
                 throw new RuntimeException(sprintf('Activity field %s must be an object.', $field));
             }
         }
-        return $this->loaded[$appKey] = $schema;
+        return $this->loaded[$appKey] = self::normalizeLegacyTypes($schema);
+    }
+
+    /** Keep stored legacy image definitions usable without exposing a removed type. */
+    public static function normalizeLegacyTypes(array $schema): array
+    {
+        foreach (($schema['fields'] ?? []) as $field => $definition) {
+            if (is_array($definition) && ($definition['type'] ?? null) === 'wikimedia') {
+                $schema['fields'][$field]['type'] = 'image';
+            }
+        }
+        return $schema;
     }
 
     public function validate(string $appKey, array $data, bool $migration = false, ?array $fieldDefinitions = null): void
@@ -133,7 +144,7 @@ final class ActivitySchema
         if ($value === null || $value === '') return null;
         $type = (string)($definition['type'] ?? 'text');
         $scalar = is_string($value) || is_int($value) || is_float($value);
-        if (in_array($type, ['text', 'textarea', 'select', 'url', 'date', 'wikimedia'], true) && !$scalar) {
+        if (in_array($type, ['text', 'textarea', 'select', 'url', 'date'], true) && !$scalar) {
             return 'Expected a scalar value.';
         }
         if ($type === 'number' && (!is_int($value) && !is_float($value) && !(is_string($value) && is_numeric($value)))) {
@@ -145,9 +156,6 @@ final class ActivitySchema
         }
         if ($type === 'date' && !$this->validDate($text)) return 'Expected a valid YYYY-MM-DD date.';
         if ($type === 'url' && !filter_var($text, FILTER_VALIDATE_URL)) return 'Expected a valid URL.';
-        if ($type === 'wikimedia' && !$this->validWikimediaReference($text)) {
-            return 'Expected a valid URL or Wikimedia File reference.';
-        }
         if ($type === 'select' && isset($definition['options']) && is_array($definition['options'])) {
             $options = array_map(fn(mixed $option): string => is_array($option) ? (string)($option['value'] ?? '') : (string)$option, $definition['options']);
             if (!in_array($text, $options, true)) return 'Value is not an allowed option.';
@@ -173,12 +181,6 @@ final class ActivitySchema
         return checkdate((int)$parts[2], (int)$parts[3], (int)$parts[1]);
     }
 
-    private function validWikimediaReference(string $value): bool
-    {
-        if (filter_var($value, FILTER_VALIDATE_URL) !== false) return true;
-        if (preg_match('/\A(?:File|Image|ファイル):[^\r\n]+\z/iu', $value)) return true;
-        return (bool)preg_match('/\A[^\r\n]+\.(?:avif|gif|jpe?g|png|svg|tiff?|webp)\p{Cf}*\z/iu', $value);
-    }
 }
 
 final class ActivityValidationException extends RuntimeException

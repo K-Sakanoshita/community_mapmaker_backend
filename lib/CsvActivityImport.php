@@ -54,11 +54,18 @@ final class CsvActivityImport
         }
 
         $rows = [];
+        $rowLines = [];
+        $offset = ftell($stream);
+        $line = 1 + preg_match_all('/\r\n|\r|\n/', substr($csv, 0, $offset));
         while (($values = fgetcsv($stream, 0, ',', '"', '')) !== false) {
+            $rowLine = $line;
+            $end = ftell($stream);
+            $line += preg_match_all('/\r\n|\r|\n/', substr($csv, $offset, $end - $offset));
+            $offset = $end;
             if (count($values) === 1 && trim((string)$values[0]) === '') continue;
             if (count($values) > count($header)) {
                 fclose($stream);
-                throw new ActivityValidationException(['rows.' . count($rows) => 'CSV row has more values than the header.']);
+                throw new ActivityValidationException(['csv_rows.' . $rowLine => 'CSV row has more values than the header.']);
             }
             $row = [];
             foreach ($header as $index => $field) {
@@ -67,6 +74,7 @@ final class CsvActivityImport
                 $row[$key] = in_array($key, ['latitude', 'longitude'], true) && trim($value) === '' ? null : $value;
             }
             $rows[] = $row;
+            $rowLines[] = $rowLine;
             if (count($rows) > 5000) {
                 fclose($stream);
                 throw new ActivityValidationException(['rows' => 'At most 5000 activities can be imported at once.']);
@@ -99,6 +107,7 @@ final class CsvActivityImport
         return [
             'headers' => array_keys($logical),
             'rows' => $rows,
+            'row_lines' => $rowLines,
             'schema_candidate' => ['fields' => $candidate],
             'missing_fields' => $missing,
             'changed_fields' => array_keys($changes),
@@ -106,6 +115,19 @@ final class CsvActivityImport
             'schema_update_fields' => $schemaUpdateFields,
             'normalizations' => $normalizations,
         ];
+    }
+
+    /** Translate service row indexes to physical CSV line numbers, including skipped blank lines. */
+    public static function errorsWithLineNumbers(array $errors, array $rowLines): array
+    {
+        $mapped = [];
+        foreach ($errors as $key => $value) {
+            if (preg_match('/\Arows\.(\d+)(.*)\z/', (string)$key, $match) && isset($rowLines[(int)$match[1]])) {
+                $key = 'csv_rows.' . $rowLines[(int)$match[1]] . $match[2];
+            }
+            $mapped[$key] = $value;
+        }
+        return $mapped;
     }
 
     private function nextOrder(array $fields): int
@@ -152,14 +174,14 @@ final class CsvActivityImport
         if ($type === 'url') {
             $values = $this->values($field, $rows);
             $hasNonUrl = false;
-            $allWikimedia = $values !== [];
+            $allImages = $values !== [];
             foreach ($values as $value) {
                 if (filter_var($value, FILTER_VALIDATE_URL) === false) $hasNonUrl = true;
-                if (!$this->isWikimediaReference($value)) $allWikimedia = false;
+                if (!$this->isImageReference($value)) $allImages = false;
             }
-            if ($hasNonUrl && $allWikimedia) {
-                $definition['type'] = 'wikimedia';
-                $changes['type'] = ['from' => 'url', 'to' => 'wikimedia'];
+            if ($hasNonUrl && $allImages) {
+                $definition['type'] = 'image';
+                $changes['type'] = ['from' => 'url', 'to' => 'image'];
             }
         }
 
@@ -191,14 +213,14 @@ final class CsvActivityImport
     private function normalizeDate(string $value): string
     {
         $trimmed = trim($value);
-        if (!preg_match('/\A(\d{4})[\/-](\d{2})[\/-](\d{2})\z/', $trimmed, $parts)) return $value;
+        if (!preg_match('/\A(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})\z/', $trimmed, $parts)) return $value;
         if (!checkdate((int)$parts[2], (int)$parts[3], (int)$parts[1])) return $value;
         return sprintf('%04d-%02d-%02d', (int)$parts[1], (int)$parts[2], (int)$parts[3]);
     }
 
     private function isDateValue(string $value): bool
     {
-        if (!preg_match('/\A(\d{4})[\/-](\d{2})[\/-](\d{2})\z/', trim($value), $parts)) return false;
+        if (!preg_match('/\A(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})\z/', trim($value), $parts)) return false;
         return checkdate((int)$parts[2], (int)$parts[3], (int)$parts[1]);
     }
 
@@ -212,8 +234,8 @@ final class CsvActivityImport
             $type = 'date';
         } elseif ($values !== [] && array_reduce($values, static fn(bool $ok, string $value): bool => $ok && filter_var($value, FILTER_VALIDATE_URL) !== false, true)) {
             $type = 'url';
-        } elseif ($values !== [] && array_reduce($values, fn(bool $ok, string $value): bool => $ok && $this->isWikimediaReference($value), true)) {
-            $type = 'wikimedia';
+        } elseif ($values !== [] && array_reduce($values, fn(bool $ok, string $value): bool => $ok && $this->isImageReference($value), true)) {
+            $type = 'image';
         }
         return [
             'label' => $field,
@@ -232,7 +254,7 @@ final class CsvActivityImport
         ), static fn(string $value): bool => $value !== ''));
     }
 
-    private function isWikimediaReference(string $value): bool
+    private function isImageReference(string $value): bool
     {
         if (filter_var($value, FILTER_VALIDATE_URL) !== false) return true;
         if (preg_match('/\A(?:File|Image|ファイル):[^\r\n]+\z/iu', $value)) return true;

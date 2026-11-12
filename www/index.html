@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <script src="site-messages.js?v=20261110-private-preview"></script>
+  <script src="site-language.js?v=20261024-language"></script>
+  <link rel="icon" href="favicon.ico?v=20261024" sizes="16x16 32x32 48x48">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20261024">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="OpenStreetMapから公園や施設などの情報を取得し、告知や案内を追加して、地図で共有するサイトです。既存プロジェクトへの参加と、自分のプロジェクトの作成（開発中）ができます。" data-site-i18n-content="OpenStreetMapから公園や施設などの情報を取得し、告知や案内を追加して、地図で共有するサイトです。既存プロジェクトへの参加と、自分のプロジェクトの作成（開発中）ができます。">
+  <meta property="og:image" content="portal-hero.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta property="og:image:alt" content="地域の地図をみんなでつくるコミュニティマップメーカー" data-site-i18n-content="地域の地図をみんなでつくるコミュニティマップメーカー">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="portal-hero.jpg">
+  <title data-site-i18n="コミュニティマップメーカー | プロジェクト一覧">コミュニティマップメーカー | プロジェクト一覧</title>
+  <link rel="stylesheet" href="theme.css?v=20261024">
+  <link rel="stylesheet" href="portal.css?v=20261110-private-preview">
+  <link rel="stylesheet" href="site-header.css?v=20261024-language">
+  <script src="project-leave.js?v=20261024" defer></script>
+  <script src="portal.js?v=20261110-private-preview" defer></script>
+  <link rel="stylesheet" href="site-footer.css?v=20261024">
+  <script src="site-session.js?v=20261024-username-link" defer></script>
+</head>
+<body class="site-page">
+  <a class="skip-link" href="#projects"><span data-site-i18n="プロジェクト一覧へ移動">プロジェクト一覧へ移動</span></a>
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="コミュニティマップメーカー ホーム" data-site-i18n-aria-label="コミュニティマップメーカー ホーム"><img class="brand-symbol" src="cMapmaker.png" alt="" width="500" height="500"><span><span data-site-i18n="コミュニティマップメーカー">コミュニティマップメーカー</span></span></a>
+    <nav class="header-links" aria-label="サイトメニュー" data-site-i18n-aria-label="サイトメニュー">
+      <a id="headerProjectListLink" class="project-list-link" href="./#projects" data-project-list-link><span data-site-i18n="プロジェクト一覧">プロジェクト一覧</span></a>
+      <a id="headerRegistrationLink" href="register.html"><span data-site-i18n="ユーザー登録">ユーザー登録</span></a>
+      <a id="headerLoginLink" class="login-link" href="admin/"><span data-site-i18n="ログイン">ログイン</span> <span aria-hidden="true">↗</span></a>
+      <div id="headerSession" class="session-actions" hidden>
+        <a id="currentAdmin" class="session-user" href="mypage.html"></a>
+        <button id="logoutButton" class="session-logout" type="button"><span data-site-i18n="ログアウト">ログアウト</span></button>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <h1 id="hero-title"><span data-site-i18n="まちの発見を、">まちの発見を、</span><br><em><span data-site-i18n="みんなの地図に。">みんなの地図に。</span></em></h1>
+        <p class="hero-lead"><span data-site-i18n="OpenStreetMapから公園や施設などの情報を取得し、告知や案内を追加して、地図で共有するサイトです。">OpenStreetMapから公園や施設などの情報を取得し、告知や案内を追加して、地図で共有するサイトです。</span></p>
+        <div class="hero-actions"><a class="primary-action" href="#projects"><span data-site-i18n="プロジェクト一覧">プロジェクト一覧</span> <span aria-hidden="true">↓</span></a><a class="text-action" href="#join"><span data-site-i18n="地図づくりへの参加方法">地図づくりへの参加方法</span> <span aria-hidden="true">↓</span></a></div>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <img src="portal-hero.jpg" alt="" width="1280" height="640" fetchpriority="high">
+      </div>
+    </section>
+
+    <section class="directory" id="projects" aria-labelledby="projects-title">
+      <nav id="projectBreadcrumbs" class="site-breadcrumbs" aria-label="現在の位置" hidden data-site-i18n-aria-label="現在の位置">
+        <ol>
+          <li><a href="./"><span data-site-i18n="ポータル">ポータル</span></a></li>
+          <li><a href="./#projects" data-project-list-link><span data-site-i18n="プロジェクト一覧">プロジェクト一覧</span></a></li>
+          <li><span id="breadcrumbProjectName" aria-current="page"><span data-site-i18n="プロジェクト詳細">プロジェクト詳細</span></span></li>
+        </ol>
+      </nav>
+      <div class="section-intro"><div><h2 id="projects-title"><span data-site-i18n="プロジェクト一覧">プロジェクト一覧</span></h2><p id="directoryDescription"><span data-site-i18n="プロジェクト詳細から管理画面へ進めます。地図を見たいときは「マップを開く」を選んでください。">プロジェクト詳細から管理画面へ進めます。地図を見たいときは「マップを開く」を選んでください。</span></p></div><span class="project-count" id="projectCount" aria-live="polite"></span></div>
+      <div id="portalTools" class="portal-tools" hidden>
+        <a class="text-action" href="admin/?view=create"><span data-site-i18n="プロジェクトを作成">プロジェクトを作成</span></a>
+        <a class="text-action" id="portalTrashLink" href="admin/?view=trash" hidden><span data-site-i18n="削除済みデータ管理">削除済みデータ管理</span></a>
+      </div>
+      <p class="load-status" id="loadStatus" role="status" aria-live="polite"><span data-site-i18n="プロジェクトを読み込んでいます…">プロジェクトを読み込んでいます…</span></p>
+      <ul class="project-list" id="projectGrid" aria-label="プロジェクト一覧" data-site-i18n-aria-label="プロジェクト一覧"></ul>
+      <div class="empty-state" id="emptyState" hidden><span aria-hidden="true">⌕</span><h3><span data-site-i18n="該当するプロジェクトがありません">該当するプロジェクトがありません</span></h3><p><span data-site-i18n="検索語を変えて、もう一度お試しください。">検索語を変えて、もう一度お試しください。</span></p></div>
+    </section>
+
+    <section class="join-section" id="join" aria-labelledby="join-title">
+      <div>
+        <h2 id="join-title"><span data-site-i18n="地図づくりへの、2つの参加方法。">地図づくりへの、2つの参加方法。</span></h2>
+        <p><strong><span data-site-i18n="既存のプロジェクトに参加する">既存のプロジェクトに参加する</span></strong><br><span data-site-i18n="ユーザー登録時に参加先を選び、そのプロジェクトの地図に載っている場所の情報を投稿・編集できます。">ユーザー登録時に参加先を選び、そのプロジェクトの地図に載っている場所の情報を投稿・編集できます。</span></p>
+        <p><strong><span data-site-i18n="自分のプロジェクトをつくる（開発中）">自分のプロジェクトをつくる（開発中）</span></strong><br><span data-site-i18n="公園や地域の施設など、テーマを決めて情報を集めるプロジェクトを作成・管理できます。">公園や地域の施設など、テーマを決めて情報を集めるプロジェクトを作成・管理できます。</span></p>
+      </div>
+      <a href="register.html"><span data-site-i18n="ユーザー登録する">ユーザー登録する</span> <span aria-hidden="true">↗</span></a>
+    </section>
+  </main>
+  <footer class="site-footer">
+    <div class="site-footer-inner">
+      <div class="site-footer-info">
+        <span class="site-footer-brand"><span data-site-i18n="コミュニティマップメーカー">コミュニティマップメーカー</span></span>
+        <p><span data-site-i18n="運営：Open Across Base">運営：Open Across Base</span><br><span data-site-i18n="問い合わせ：">問い合わせ：</span><a href="mailto:info@openacrossbase.net">info@openacrossbase.net</a></p>
+      </div>
+      <nav class="site-footer-links" aria-label="フッターメニュー" data-site-i18n-aria-label="フッターメニュー">
+        <a href="./"><span data-site-i18n="ホーム">ホーム</span></a>
+        <a href="./#projects" data-project-list-link><span data-site-i18n="プロジェクト一覧">プロジェクト一覧</span></a>
+        <a href="register.html"><span data-site-i18n="ユーザー登録">ユーザー登録</span></a>
+        <a href="privacy.html"><span data-site-i18n="プライバシーポリシー">プライバシーポリシー</span></a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

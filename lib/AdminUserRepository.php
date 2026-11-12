@@ -21,7 +21,7 @@ final class AdminUserRepository implements AdminUserRepositoryInterface, Project
         $sql = 'SELECT u.id, u.userid, u.email, u.status, u.role, u.email_verified_at, u.last_login_at, u.created_at, u.updated_at, '
             . '(SELECT COUNT(*) FROM activities a WHERE a.is_deleted = 0 AND a.created_by_user_id = u.id) AS activity_count, '
             . '(SELECT COUNT(*) FROM projects owned WHERE owned.created_by_user_id = u.id AND owned.is_deleted = 0) AS owned_project_count, '
-            . '(SELECT COUNT(*) FROM user_projects up JOIN projects p ON p.id = up.project_id WHERE up.user_id = u.id AND p.is_deleted = 0) AS project_count '
+            . '(SELECT COUNT(*) FROM user_projects up JOIN projects p ON p.id = up.project_id WHERE up.user_id = u.id AND up.role <> \'banned\' AND p.is_deleted = 0) AS project_count '
             . 'FROM users u ' . $where . ' ORDER BY u.updated_at DESC, u.id DESC LIMIT :limit OFFSET :offset';
         $statement = $this->pdo->prepare($sql);
         foreach ($params as $key => $value) $statement->bindValue($key, $value);
@@ -45,7 +45,7 @@ final class AdminUserRepository implements AdminUserRepositoryInterface, Project
             'SELECT u.id, u.userid, u.email, u.status, u.role, u.email_verified_at, u.last_login_at, u.created_at, u.updated_at, '
             . '(SELECT COUNT(*) FROM activities a WHERE a.is_deleted = 0 AND a.created_by_user_id = u.id) AS activity_count, '
             . '(SELECT COUNT(*) FROM projects owned WHERE owned.created_by_user_id = u.id AND owned.is_deleted = 0) AS owned_project_count, '
-            . '(SELECT COUNT(*) FROM user_projects up JOIN projects p ON p.id = up.project_id WHERE up.user_id = u.id AND p.is_deleted = 0) AS project_count '
+            . '(SELECT COUNT(*) FROM user_projects up JOIN projects p ON p.id = up.project_id WHERE up.user_id = u.id AND up.role <> \'banned\' AND p.is_deleted = 0) AS project_count '
             . 'FROM users u WHERE u.id = :id LIMIT 1'
         );
         $statement->execute([':id' => $id]);
@@ -87,7 +87,7 @@ final class AdminUserRepository implements AdminUserRepositoryInterface, Project
     public function update(int $id, string $status, string $role): ?array
     {
         $statement = $this->pdo->prepare(
-            'UPDATE users SET status = :status, role = :role, updated_at = :updated_at WHERE id = :id'
+            "UPDATE users SET status = :status, role = :role, updated_at = :updated_at WHERE id = :id AND status <> 'deleted'"
         );
         $statement->execute([
             ':status' => $status,
@@ -95,7 +95,8 @@ final class AdminUserRepository implements AdminUserRepositoryInterface, Project
             ':updated_at' => gmdate('Y-m-d H:i:s'),
             ':id' => $id,
         ]);
-        return $this->find($id);
+        $user = $this->find($id);
+        return $user !== null && $user['status'] !== 'deleted' ? $user : null;
     }
 
     public function countActiveAdmins(): int
@@ -175,7 +176,7 @@ final class AdminUserRepository implements AdminUserRepositoryInterface, Project
 
     private function where(array $filters): array
     {
-        $clauses = [];
+        $clauses = ($filters['status'] ?? '') === 'deleted' ? [] : ["u.status <> 'deleted'"];
         $params = [];
         if (($filters['search'] ?? '') !== '') {
             $clauses[] = '(LOCATE(:search_userid, LOWER(u.userid)) > 0 OR LOCATE(:search_email, LOWER(u.email)) > 0)';

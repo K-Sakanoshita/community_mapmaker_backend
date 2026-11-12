@@ -1,0 +1,51 @@
+/* Shared UI palette. Change these tokens to update all themed pages.
+   Layout stays in each page stylesheet; map illustrations have their own colors. */
+:root {
+  --cmm-accent-rgb: 184, 62, 0;
+  --cmm-accent-hover-rgb: 148, 50, 0;
+  --cmm-muted-rgb: 112, 100, 93;
+  --cmm-surface-soft-rgb: 255, 240, 229;
+  --cmm-text: #302b28;
+  --cmm-muted: rgb(var(--cmm-muted-rgb));
+  --cmm-text-secondary: #59463a;
+  --cmm-background: #fffaf6;
+  --cmm-surface: #fff;
+  --cmm-surface-soft: rgb(var(--cmm-surface-soft-rgb));
+  --cmm-surface-subtle: #fffcf9;
+  --cmm-surface-hover: #f5dfce;
+  --cmm-surface-disabled: #f2eeeb;
+  --cmm-text-disabled: #8a7c73;
+  --cmm-accent: rgb(var(--cmm-accent-rgb));
+  --cmm-accent-hover: rgb(var(--cmm-accent-hover-rgb));
+  --cmm-accent-label: #a43800;
+  --cmm-border: #c7b9b0;
+  --cmm-border-soft: #eadfd6;
+  --cmm-border-key: #d7c9be;
+  --cmm-icon-muted: #806d60;
+  --cmm-footer-background: #352920;
+  --cmm-footer-text: #f5e9e0;
+  --cmm-danger: #bd3232;
+  --cmm-error: #a21f1f;
+  --cmm-error-strong: #a31d1d;
+  --cmm-success: #08784f;
+  --cmm-success-text: #11633d;
+  --cmm-success-label: #076241;
+  --cmm-success-background: #d9f3e8;
+  --cmm-warning-text: #765b00;
+  --cmm-warning-background: #fff1b8;
+  --cmm-dirty-background: #fff3b5;
+  --cmm-dirty-border: #e3a800;
+  --cmm-danger-text: #8f2929;
+  --cmm-danger-background: #f8dcdc;
+  --cmm-invalid-background: #ffe0e0;
+  --cmm-panel-shadow: #5938201a;
+  --cmm-card-shadow: #5938200b;
+  --cmm-card-hover-shadow: #59382021;
+  --cmm-accent-shadow: rgba(var(--cmm-accent-rgb), .1372549020);
+  --cmm-focus-glow: rgba(var(--cmm-accent-rgb), .1490196078);
+  --cmm-menu-shadow: #0002;
+  --cmm-on-accent: #fff;
+  --cmm-floating-shadow: rgb(0 0 0 / .24);
+  --cmm-dialog-shadow: rgb(0 0 0 / .25);
+  --cmm-backdrop: rgb(0 0 0 / .45);
+}

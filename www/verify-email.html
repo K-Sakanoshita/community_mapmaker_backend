@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <script src="site-messages.js?v=20261027-project-settings"></script>
+  <script src="site-language.js?v=20261024-language"></script>
+  <link rel="icon" href="favicon.ico?v=20261024" sizes="16x16 32x32 48x48">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20261024">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="referrer" content="no-referrer">
+  <link rel="stylesheet" href="theme.css?v=20261024">
+  <title data-site-i18n="メールアドレスの確認 | Community Map Maker">メールアドレスの確認 | Community Map Maker</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 20px; box-sizing: border-box; background: #edf4ef; color: #173f32; font-family: system-ui, sans-serif; }
+    main { width: min(100%, 440px); padding: 30px; box-sizing: border-box; border-radius: 12px; background: #fff; box-shadow: 0 10px 35px #173f321a; }
+    h1 { margin: 0 0 10px; font-size: 1.7rem; } p { line-height: 1.6; } a { color: #126d49; }
+    button { padding: 12px 18px; border: 0; border-radius: 6px; background: #16794e; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: wait; } .error { color: #a21f1f; }
+  </style>
+  <link rel="stylesheet" href="site-footer.css?v=20261024">
+  <link rel="stylesheet" href="site-header.css?v=20261024-language">
+  <script src="site-session.js?v=20261024-username-link" defer></script>
+</head>
+<body class="site-page site-page--standalone">
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="コミュニティマップメーカー ホーム" data-site-i18n-aria-label="コミュニティマップメーカー ホーム"><img class="brand-symbol" src="cMapmaker.png" alt="" width="500" height="500"><span><span data-site-i18n="コミュニティマップメーカー">コミュニティマップメーカー</span></span></a>
+    <nav class="header-links" aria-label="サイトメニュー" data-site-i18n-aria-label="サイトメニュー">
+      <a id="headerProjectListLink" class="project-list-link" href="./#projects" data-project-list-link><span data-site-i18n="プロジェクト一覧">プロジェクト一覧</span></a>
+      <a id="headerRegistrationLink" href="register.html"><span data-site-i18n="ユーザー登録">ユーザー登録</span></a>
+      <a id="headerLoginLink" class="login-link" href="admin/"><span data-site-i18n="ログイン">ログイン</span> <span aria-hidden="true">↗</span></a>
+      <div id="headerSession" class="session-actions" hidden>
+        <a id="currentAdmin" class="session-user" href="mypage.html"></a>
+        <button id="logoutButton" class="session-logout" type="button"><span data-site-i18n="ログアウト">ログアウト</span></button>
+      </div>
+    </nav>
+  </header>
+<main>
+  <h1 id="heading"><span data-site-i18n="メールアドレスの確認">メールアドレスの確認</span></h1>
+  <p id="status" role="status" aria-live="polite"><span data-site-i18n="下のボタンでメールアドレスを確認してください。">下のボタンでメールアドレスを確認してください。</span></p>
+  <button id="verifyButton" type="button"><span data-site-i18n="メールアドレスを確認する">メールアドレスを確認する</span></button>
+  <p id="resendLink" hidden><a href="register.html"><span data-site-i18n="確認メールを再送する">確認メールを再送する</span></a></p>
+  <div id="projectLinks"></div>
+</main>
+  <footer class="site-footer">
+    <div class="site-footer-inner">
+      <div class="site-footer-info">
+        <span class="site-footer-brand"><span data-site-i18n="コミュニティマップメーカー">コミュニティマップメーカー</span></span>
+        <p><span data-site-i18n="運営：Open Across Base">運営：Open Across Base</span><br><span data-site-i18n="問い合わせ：">問い合わせ：</span><a href="mailto:info@openacrossbase.net">info@openacrossbase.net</a></p>
+      </div>
+      <nav class="site-footer-links" aria-label="フッターメニュー" data-site-i18n-aria-label="フッターメニュー">
+        <a href="./"><span data-site-i18n="ホーム">ホーム</span></a>
+        <a href="./#projects"><span data-site-i18n="プロジェクト一覧">プロジェクト一覧</span></a>
+        <a href="register.html"><span data-site-i18n="ユーザー登録">ユーザー登録</span></a>
+        <a href="privacy.html"><span data-site-i18n="プライバシーポリシー">プライバシーポリシー</span></a>
+      </nav>
+    </div>
+  </footer>
+<script>
+'use strict';
+const params = new URLSearchParams(location.search);
+const token = params.get('token');
+const appKey = params.get('app_key') || '';
+const cleanUrl = new URL(location.href); cleanUrl.searchParams.delete('token');
+history.replaceState(null, '', cleanUrl);
+SiteLanguage.onSwitch(url => { if (!verified && /^[a-f0-9]{64}$/.test(token || '')) url.searchParams.set('token', token); });
+const statusText = document.getElementById('status');
+const heading = document.getElementById('heading');
+const resendLink = document.getElementById('resendLink');
+const button = document.getElementById('verifyButton');
+const projectLinks = document.getElementById('projectLinks');
+let verified = false;
+const resendAnchor = resendLink.querySelector('a');
+resendAnchor.href = 'register.html' + (appKey ? '?app_key=' + encodeURIComponent(appKey) : '');
+function showProjects(projects) {
+  projectLinks.replaceChildren();
+  for (const project of projects) {
+    if (typeof project?.project_name !== 'string' || typeof project.frontend_url !== 'string') continue;
+    let url;
+    try { url = new URL(project.frontend_url); } catch { continue; }
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) continue;
+    const link = document.createElement('a');
+    link.href = url.href; link.dataset.noLanguage = '';
+    link.textContent = SiteLanguage.t('{name}へ戻る', { name: project.project_name });
+    link.referrerPolicy = 'no-referrer';
+    const paragraph = document.createElement('p');
+    paragraph.append(link);
+    projectLinks.append(paragraph);
+  }
+}
+// app_key only selects a public managed project; it never supplies a return URL.
+if (appKey) fetch('auth/registration-projects.php', { headers: { Accept: 'application/json' } })
+  .then(response => response.ok ? response.json() : null)
+  .then(data => { if (!verified && Array.isArray(data?.projects)) showProjects(data.projects.filter(project => project.app_key === appKey)); })
+  .catch(() => {});
+if (!token || !/^[a-f0-9]{64}$/.test(token)) {
+  statusText.textContent = SiteLanguage.t('確認リンクが正しくありません。確認メールを再送してください。');
+  statusText.className = 'error';
+  button.hidden = true;
+  resendLink.hidden = false;
+}
+button.addEventListener('click', async () => {
+  button.disabled = true;
+  statusText.textContent = SiteLanguage.t('確認中…');
+  try {
+    const response = await fetch('auth/verify.php?token=' + encodeURIComponent(token), { headers: { 'Accept': 'application/json' }, cache: 'no-store' });
+    const result = await response.json();
+    if (!response.ok || result.email_verified !== true) throw new Error('verification_failed');
+    verified = true;
+    heading.textContent = SiteLanguage.t('メール確認が完了しました');
+    document.title = SiteLanguage.t('メール確認完了 | Community Map Maker');
+    const names = Array.isArray(result.projects) ? result.projects.map(project => project.project_name).filter(name => typeof name === 'string') : [];
+    statusText.textContent = (names.length ? names.join(SiteLanguage.lang === 'en' ? ', ' : '、') : SiteLanguage.t('利用するアプリ')) + SiteLanguage.t('から、登録したユーザーIDとパスワードでログインできます。');
+    if (Array.isArray(result.projects)) showProjects(result.projects);
+    button.hidden = true;
+  } catch {
+    statusText.textContent = SiteLanguage.t('確認できませんでした。リンクの期限が切れたか、既に使用されています。確認メールを再送してください。');
+    statusText.className = 'error';
+    button.disabled = false;
+    resendLink.hidden = false;
+  }
+});
+</script>
+</body>
+</html>

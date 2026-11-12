@@ -235,16 +235,28 @@ adminAssert(
     'Important actions must be audited without password hashes or tokens.'
 );
 
-$contributor = $service->create([
+$memberInput = [
     'userid' => 'app-contributor', 'password' => 'contributor password',
-    'password_confirmation' => 'contributor password', 'role' => 'contributor',
+    'password_confirmation' => 'contributor password', 'role' => 'user',
     'projects' => [['project_id' => 10, 'role' => 'contributor']],
-], (int)$admin['id'], '127.0.0.1');
-adminAssert($contributor['role'] === 'contributor' && $contributor['projects'][0]['role'] === 'contributor', 'Admins must be able to create app-only contributors and assign contributor projects.');
-$service->list(['role' => 'contributor']);
-$contributor = $service->update((int)$contributor['id'], ['role' => 'user'], (int)$admin['id']);
-adminAssert($contributor['role'] === 'user', 'Admins must be able to grant console access explicitly.');
-$contributor = $service->update((int)$contributor['id'], ['role' => 'contributor'], (int)$admin['id']);
-adminAssert($contributor['role'] === 'contributor', 'Admins must be able to revoke console access.');
+];
+$member = $service->create($memberInput, (int)$admin['id'], '127.0.0.1');
+adminAssert($member['role'] === 'user' && $member['projects'][0]['role'] === 'contributor', 'Normal users can still be project contributors.');
+adminThrows(fn() => $service->create(array_replace($memberInput, ['userid'=>'retired-role', 'role'=>'contributor']), (int)$admin['id'], '127.0.0.1'), ValidationException::class, 'Removed account role cannot be created without email.');
+adminThrows(fn() => $service->create(array_replace($memberInput, ['userid'=>'retired-invite', 'email'=>'retired@example.test', 'role'=>'contributor']), (int)$admin['id'], '127.0.0.1'), ValidationException::class, 'Removed account role cannot be invited.');
+adminThrows(fn() => $service->list(['role'=>'contributor']), ValidationException::class, 'Removed account role cannot be filtered.');
+adminThrows(fn() => $service->update((int)$member['id'], ['role'=>'contributor'], (int)$admin['id']), ValidationException::class, 'Removed account role cannot be assigned.');
+adminAssert($service->find((int)$member['id'])['role'] === 'user', 'Rejected role changes leave the user unchanged.');
 
 echo "Admin user behavior: ok\n";
+
+$banned = $service->update((int)$managedSecond['id'], ['projects'=>[['project_id'=>10,'role'=>'banned']]], (int)$admin['id']);
+adminAssert($banned['projects'][0]['role'] === 'banned', 'Admin can persist a project ban.');
+$unchanged = $service->update((int)$managedSecond['id'], ['status'=>'active'], (int)$admin['id']);
+adminAssert($unchanged['projects'][0]['role'] === 'banned', 'Unrelated saves preserve bans.');
+adminThrows(fn()=> $service->update((int)$managedSecond['id'], ['role'=>'admin'], (int)$admin['id']), ValidationException::class, 'Cannot promote a banned user to global administrator without lifting bans.');
+adminThrows(fn()=> $service->update((int)$admin['id'], ['projects'=>[['project_id'=>10,'role'=>'banned']]], (int)$admin['id']), ValidationException::class, 'Global administrator cannot be banned.');
+$unbanned = $service->update((int)$managedSecond['id'], ['projects'=>[]], (int)$admin['id']);
+adminAssert($unbanned['projects'] === [], 'Admin can lift a ban without granting membership.');
+$restored = $service->update((int)$managedSecond['id'], ['projects'=>[['project_id'=>10,'role'=>'contributor']]], (int)$admin['id']);
+adminAssert($restored['projects'][0]['role'] === 'contributor', 'Admin can restore contributor access.');

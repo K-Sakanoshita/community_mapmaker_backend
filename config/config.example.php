@@ -19,6 +19,7 @@ return [
         'verification_url' => 'https://api.example.jp/verify-email.html',
         'password_reset_url' => 'https://api.example.jp/reset-password.html',
         'rate_limit_secret' => getenv('CMM_RATE_LIMIT_SECRET') ?: '',
+        // Same-origin requests are allowed automatically. List other website origins here.
         'allowed_origins' => [
             'https://example.jp',
         ],
@@ -40,6 +41,20 @@ return [
             'cache_ttl' => 86400,
             'max_entries' => 1000,
             // 'cache_dir' => '/private/writable/thumbnail-cache',
+        ],
+        // Public park page metadata. Keep the cache outside the Web document root.
+        'park_lookup' => [
+            'endpoint' => getenv('CMM_OVERPASS_URL') ?: 'https://overpass-api.de/api/interpreter',
+            'cache_ttl' => 86400,
+            // 'cache_dir' => '/private/writable/osm-park-cache',
+        ],
+        // CSV coordinate lookup only; a trusted Overpass endpoint, never supplied by clients.
+        'coordinate_lookup' => [
+            'endpoint' => getenv('CMM_OVERPASS_URL') ?: 'https://overpass-api.de/api/interpreter',
+            'cache_ttl' => 86400,
+            'budget_seconds' => 20,
+            'osm_api_fallback' => true, // Read-only OSM API when Overpass is unavailable.
+            // 'cache_dir' => '/private/writable/osm-coordinate-cache',
         ],
         'apps' => [
             'playgrounds' => [

@@ -43,6 +43,8 @@ final class AdminApi
             Http::respond(409, ['status' => 'error', 'code' => 'identity_already_registered']);
         } catch (AdminUserNotFoundException) {
             Http::respond(404, ['status' => 'error', 'code' => 'user_not_found']);
+        } catch (AdminUserDeletedException) {
+            Http::respond(409, ['status' => 'error', 'code' => 'user_deleted']);
         } catch (LastAdminException) {
             Http::respond(409, ['status' => 'error', 'code' => 'last_active_admin']);
         } catch (RateLimitExceededException) {

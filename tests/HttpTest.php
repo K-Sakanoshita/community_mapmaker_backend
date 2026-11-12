@@ -60,4 +60,36 @@ try {
     $_SERVER = $originalServer;
 }
 
-echo "HTTP Basic credential parsing: ok\n";
+$sameOrigin = new ReflectionMethod(Http::class, 'isSameOrigin');
+$originCases = [
+    ['https://cmapmaker.openacrossbase.net', ['HTTP_HOST' => 'cmapmaker.openacrossbase.net', 'HTTPS' => 'on'], [], true],
+    ['https://CMAPMAKER.openacrossbase.net:443', ['HTTP_HOST' => 'cmapmaker.openacrossbase.net', 'HTTPS' => 'on'], [], true],
+    ['http://example.test:80', ['HTTP_HOST' => 'example.test', 'HTTPS' => 'off'], [], true],
+    ['http://example.test:8080', ['HTTP_HOST' => 'example.test:8080'], [], true],
+    ['http://[::1]:8080', ['HTTP_HOST' => '[::1]:8080'], [], true],
+    ['http://example.test', ['HTTP_HOST' => 'example.test', 'HTTPS' => 'on'], [], false],
+    ['https://example.test:444', ['HTTP_HOST' => 'example.test', 'HTTPS' => 'on'], [], false],
+    ['https://other.test', ['HTTP_HOST' => 'example.test', 'HTTPS' => 'on'], [], false],
+    ['https://example.test.evil.test', ['HTTP_HOST' => 'example.test', 'HTTPS' => 'on'], [], false],
+    ['https://user@example.test', ['HTTP_HOST' => 'example.test', 'HTTPS' => 'on'], [], false],
+    ['https://example.test/', ['HTTP_HOST' => 'example.test', 'HTTPS' => 'on'], [], false],
+    ['https://example.test?x=1', ['HTTP_HOST' => 'example.test', 'HTTPS' => 'on'], [], false],
+    ['https://example.test#x', ['HTTP_HOST' => 'example.test', 'HTTPS' => 'on'], [], false],
+    ["https://example.test\n", ['HTTP_HOST' => 'example.test', 'HTTPS' => 'on'], [], false],
+    ['https://example.test', ['HTTP_HOST' => 'example.test/path', 'HTTPS' => 'on'], [], false],
+    ['null', ['HTTP_HOST' => 'example.test'], [], false],
+    ['https://example.test', ['HTTPS' => 'on'], [], false],
+    ['https://example.test', ['HTTP_HOST' => 'example.test', 'HTTP_X_FORWARDED_PROTO' => 'https'], [], false],
+    ['https://example.test', ['HTTP_HOST' => 'example.test', 'HTTP_X_FORWARDED_PROTO' => 'https'], ['trust_proxy_headers' => true], true],
+    ['https://evil.test', ['HTTP_HOST' => 'example.test', 'HTTP_X_FORWARDED_HOST' => 'evil.test', 'HTTPS' => 'on'], [], false],
+];
+try {
+    foreach ($originCases as [$origin, $server, $config, $expected]) {
+        $_SERVER = $server;
+        assertSameValue($expected, $sameOrigin->invoke(null, $origin, $config), 'Same-origin comparison for ' . $origin);
+    }
+} finally {
+    $_SERVER = $originalServer;
+}
+
+echo "HTTP Basic credential parsing and same-origin checks: ok\n";

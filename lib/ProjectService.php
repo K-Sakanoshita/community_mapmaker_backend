@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace CommunityMapMaker\Activity;
 
+require_once __DIR__ . '/PageRendering.php';
+
 use RuntimeException;
 
 final class ProjectService
@@ -24,6 +26,7 @@ final class ProjectService
         $dbProjects = $this->projects->list($onlyEnabled);
         $dbMap = [];
         foreach ($dbProjects as $p) {
+            $p['schema'] = ActivitySchema::normalizeLegacyTypes($p['schema']);
             $dbMap[$p['app_key']] = $p;
         }
         $deletedKeys = array_fill_keys($this->projects->deletedKeys(), true);
@@ -40,6 +43,8 @@ final class ProjectService
                         'project_name' => (string)($config['project_name'] ?? $appKey),
                         'frontend_url' => $config['frontend_url'] ?? null,
                         'frontend_public' => (bool)($config['frontend_public'] ?? false),
+                        'recruiting' => false,
+                        'page_rendering' => PageRendering::sanitize($config['page_rendering'] ?? []),
                         'schema' => $schema,
                         'enabled' => true,
                         'created_by_user_id' => null,
@@ -60,6 +65,7 @@ final class ProjectService
         $this->activitySchema->assertKey($appKey, 'app');
         $project = $this->projects->find($appKey);
         if ($project !== null && !$project['is_deleted']) {
+            $project['schema'] = ActivitySchema::normalizeLegacyTypes($project['schema']);
             return $project;
         }
         if ($project !== null) throw new ProjectNotFoundException('Project not found.');
@@ -74,6 +80,8 @@ final class ProjectService
                 'project_name' => (string)($config['project_name'] ?? $appKey),
                 'frontend_url' => $config['frontend_url'] ?? null,
                 'frontend_public' => (bool)($config['frontend_public'] ?? false),
+                'recruiting' => false,
+                'page_rendering' => PageRendering::sanitize($config['page_rendering'] ?? []),
                 'schema' => $schema,
                 'enabled' => true,
                 'created_by_user_id' => null,
@@ -117,8 +125,11 @@ final class ProjectService
         $enabled = true;
         $frontendUrl = $this->sanitizeFrontendUrl($input['frontend_url'] ?? null);
         $frontendPublic = $this->sanitizeFrontendPublic($input['frontend_public'] ?? false);
+        $recruiting = $this->sanitizeRecruiting($input['recruiting'] ?? false);
         if ($frontendPublic && $frontendUrl === null) throw new ActivityValidationException(['frontend_url' => 'A public frontend requires a URL.']);
-        return $this->projects->create($appKey, $projectName, $schema, $enabled, $frontendUrl, $frontendPublic, $createdByUserId);
+        $pageRendering = PageRendering::sanitize(array_key_exists('page_rendering', $input) ? $input['page_rendering'] : []);
+        PageRendering::assertFrontend($pageRendering, $frontendUrl, $frontendPublic);
+        return $this->projects->create($appKey, $projectName, $schema, $enabled, $frontendUrl, $frontendPublic, $createdByUserId, $recruiting, $pageRendering);
     }
 
     public function update(string $appKey, array $input): array
@@ -143,6 +154,7 @@ final class ProjectService
         $enabled = null;
         $frontendUrl = array_key_exists('frontend_url', $input) ? ($this->sanitizeFrontendUrl($input['frontend_url']) ?? '') : null;
         $frontendPublic = array_key_exists('frontend_public', $input) ? $this->sanitizeFrontendPublic($input['frontend_public']) : null;
+        $recruiting = array_key_exists('recruiting', $input) ? $this->sanitizeRecruiting($input['recruiting']) : null;
 
         $existing = $this->projects->find($appKey);
         if ($existing !== null && $existing['is_deleted']) throw new ProjectNotFoundException('Project not found.');
@@ -153,13 +165,16 @@ final class ProjectService
             if (($frontendPublic ?? $current['frontend_public']) && $effectiveUrl === null) {
                 throw new ActivityValidationException(['frontend_url' => 'A public frontend requires a URL.']);
             }
+            $pageRendering = PageRendering::sanitize(array_key_exists('page_rendering', $input) ? $input['page_rendering'] : [], $current['page_rendering']);
+            PageRendering::assertFrontend($pageRendering, $effectiveUrl, $frontendPublic ?? $current['frontend_public']);
             return $this->projects->create(
                 $appKey,
                 $projectName ?? $current['project_name'],
                 $schema ?? $current['schema'],
                 $enabled ?? $current['enabled'],
                 $frontendUrl === null ? $current['frontend_url'] : ($frontendUrl === '' ? null : $frontendUrl),
-                $frontendPublic ?? $current['frontend_public']
+                $frontendPublic ?? $current['frontend_public'],
+                null, $recruiting ?? false, $pageRendering
             );
         }
 
@@ -167,7 +182,9 @@ final class ProjectService
         if (($frontendPublic ?? $existing['frontend_public']) && $effectiveUrl === null) {
             throw new ActivityValidationException(['frontend_url' => 'A public frontend requires a URL.']);
         }
-        $updated = $this->projects->update($appKey, $projectName, $schema, $enabled, $frontendUrl, $frontendPublic);
+        $pageRendering = PageRendering::sanitize(array_key_exists('page_rendering', $input) ? $input['page_rendering'] : [], $existing['page_rendering'] ?? null);
+        PageRendering::assertFrontend($pageRendering, $effectiveUrl, $frontendPublic ?? $existing['frontend_public']);
+        $updated = $this->projects->update($appKey, $projectName, $schema, $enabled, $frontendUrl, $frontendPublic, $recruiting, $pageRendering);
         if ($updated === null) {
             throw new ProjectNotFoundException('Project not found.');
         }
@@ -206,6 +223,12 @@ final class ProjectService
         return $value;
     }
 
+    private function sanitizeRecruiting(mixed $value): bool
+    {
+        if (!is_bool($value)) throw new ActivityValidationException(['recruiting' => 'Recruitment must be true or false.']);
+        return $value;
+    }
+
     public function sanitizeSchema(array $schema): array
     {
         $fields = $schema['fields'] ?? null;
@@ -232,7 +255,7 @@ final class ProjectService
             }
 
             $type = (string)($def['type'] ?? 'text');
-            $allowedTypes = ['text', 'textarea', 'number', 'date', 'select', 'checkbox', 'url', 'datetime', 'image', 'wikimedia', 'boolean'];
+            $allowedTypes = ['text', 'textarea', 'number', 'date', 'select', 'checkbox', 'url', 'datetime', 'image', 'boolean'];
             if (!in_array($type, $allowedTypes, true)) {
                 throw new ActivityValidationException([$fieldStr . '.type' => 'Unsupported field type.']);
             }

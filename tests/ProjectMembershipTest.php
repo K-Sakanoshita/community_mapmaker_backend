@@ -1,0 +1,90 @@
+<?php
+declare(strict_types=1);
+// All tables are connection-local temporary tables. Existing users/memberships are untouched.
+require_once dirname(__DIR__) . '/lib/Contracts.php';
+require_once dirname(__DIR__) . '/lib/ProjectRepository.php';
+require_once dirname(__DIR__) . '/lib/ProjectService.php';
+require_once dirname(__DIR__) . '/lib/ProjectMembership.php';
+require_once dirname(__DIR__) . '/lib/AuthService.php';
+require_once dirname(__DIR__) . '/lib/AuditLogRepository.php';
+require_once dirname(__DIR__) . '/lib/ProjectAccessService.php';
+require_once dirname(__DIR__) . '/lib/ProjectAdministrators.php';
+use CommunityMapMaker\Auth\{ProjectMembership, ProjectMembershipDenied, AuditLogRepositoryInterface};
+use CommunityMapMaker\Activity\{ProjectRepository, ProjectNotFoundException};
+$pdo = new PDO(getenv('CMM_TEST_DSN') ?: 'mysql:host=127.0.0.1;port=13306;dbname=community_mapmaker;charset=utf8mb4', 'cmm', 'cmm_local_test', [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
+$ddl = $pdo->query('SHOW CREATE TABLE projects')->fetch()['Create Table'];
+$ddl = preg_replace('/^\s*CONSTRAINT .*\n/m', '', $ddl);
+$ddl = preg_replace('/,\n\)/', "\n)", $ddl);
+$pdo->exec(str_replace('CREATE TABLE', 'CREATE TEMPORARY TABLE', $ddl));
+$columns = $pdo->query('SHOW COLUMNS FROM projects')->fetchAll(PDO::FETCH_COLUMN);
+if (!in_array('recruiting', $columns, true)) $pdo->exec(file_get_contents(dirname(__DIR__) . '/migrations/012_project_recruitment.sql'));
+$pdo->exec('CREATE TEMPORARY TABLE users (id BIGINT PRIMARY KEY, status VARCHAR(32), role VARCHAR(32)) ENGINE=InnoDB');
+$pdo->exec('CREATE TEMPORARY TABLE user_projects (user_id BIGINT, project_id BIGINT, role VARCHAR(32), created_at DATETIME, PRIMARY KEY(user_id,project_id)) ENGINE=InnoDB');
+$pdo->exec("INSERT INTO users VALUES (1,'active','user'),(2,'active','user'),(3,'disabled','user'),(4,'active','user')");
+$audit = new class implements AuditLogRepositoryInterface {
+    public array $rows = []; public bool $fail = false;
+    public function record(int $adminUserId, string $action, string $targetType, ?int $targetId, array $detail = []): void {
+        if ($this->fail) throw new RuntimeException('test audit failure');
+        $this->rows[] = [$adminUserId, $action, $targetId, $detail];
+    }
+    public function list(int $page, int $perPage): array { return []; }
+};
+$check = static function(bool $ok, string $message): void { if (!$ok) throw new RuntimeException($message); };
+$reject = static function(callable $fn, string $class) use ($check): void { try { $fn(); } catch (Throwable $error) { $check($error instanceof $class, 'Unexpected rejection: '.$error::class); return; } throw new RuntimeException('Expected rejection'); };
+$repo = new ProjectRepository($pdo);
+$public = $repo->create('open', 'Open', ['fields' => []], true, 'https://example.test/map/', true, null, true);
+$closed = $repo->create('closed', 'Closed', ['fields' => []], true, 'https://example.test/map/', true);
+$private = $repo->create('private', 'Private', ['fields' => []], true, null, false, null, true);
+$service = new ProjectMembership($pdo, $audit);
+$check($repo->find('open')['recruiting'] && !$repo->find('closed')['recruiting'], 'Repository persists recruitment and defaults closed');
+$check($service->status('open', null) === ['authenticated'=>false,'is_member'=>false,'can_join'=>true], 'Anonymous visitor may proceed to registration');
+$check($service->status('open', ['id'=>1])['can_join'], 'Unassigned active user may join');
+$joined = $service->join('open', 1);
+$check($joined['is_member'] && !$joined['can_join'], 'Joined user is no longer offered join');
+$check($pdo->query('SELECT role FROM user_projects WHERE user_id=1')->fetchColumn() === 'contributor', 'Self-join must grant contributor only');
+$service->join('open', 1);
+$check(count($audit->rows) === 1 && (int)$pdo->query('SELECT COUNT(*) FROM user_projects')->fetchColumn() === 1, 'Repeat join is idempotent');
+$pdo->exec("INSERT INTO user_projects VALUES (2, {$public['id']}, 'project_admin', UTC_TIMESTAMP())");
+$service->join('open', 2);
+$check($pdo->query('SELECT role FROM user_projects WHERE user_id=2')->fetchColumn() === 'project_admin', 'Existing roles must not be overwritten');
+$pdo->exec("UPDATE user_projects SET role='viewer' WHERE user_id=2");
+$service->join('open', 2);
+$check($pdo->query('SELECT role FROM user_projects WHERE user_id=2')->fetchColumn() === 'viewer', 'Existing viewers must not gain write permissions through self-join');
+$pdo->exec("UPDATE user_projects SET role='banned' WHERE user_id=2");
+$check($service->status('open', ['id'=>2]) === ['authenticated'=>true,'is_member'=>false,'can_join'=>false], 'Banned user is not a member and cannot join');
+try { $service->join('open', 2); throw new RuntimeException('Ban bypassed'); }
+catch (ProjectMembershipDenied $error) { $check($error->getMessage() === 'project_participation_banned', 'Ban is enforced server-side'); }
+$check($pdo->query('SELECT role FROM user_projects WHERE user_id=2')->fetchColumn() === 'banned', 'Failed join preserves ban');
+$check($service->status('open', ['id'=>4])['can_join'], 'Other users remain eligible');
+$pdo->exec("ALTER TABLE users ADD userid VARCHAR(64), ADD userid_normalized VARCHAR(64)");
+$pdo->exec("UPDATE users SET userid='banned-user', userid_normalized='banned-user' WHERE id=2");
+$pdo->exec("UPDATE users SET role='admin' WHERE id=1");
+$administrators = new CommunityMapMaker\Auth\ProjectAdministrators($pdo, new CommunityMapMaker\Auth\AuditLogRepository($pdo));
+$reject(fn()=> $administrators->execute(1, 'open', 'POST', 'banned-user'), CommunityMapMaker\Auth\ValidationException::class);
+$check($pdo->query('SELECT role FROM user_projects WHERE user_id=2')->fetchColumn() === 'banned', 'Administrator assignment must not bypass participation ban');
+$pdo->exec("UPDATE users SET role='user' WHERE id=1");
+$pdo->exec("DELETE FROM user_projects WHERE user_id=2");
+$check($service->join('open', 2)['is_member'], 'Removing ban allows self-join again');
+$pdo->exec("INSERT INTO user_projects VALUES (2, {$private['id']}, 'banned', UTC_TIMESTAMP())");
+$reject(fn()=> $service->status('private', ['id'=>2]), ProjectNotFoundException::class);
+$reject(fn()=> $service->join('closed', 4), ProjectMembershipDenied::class);
+$reject(fn()=> $service->join('private', 4), ProjectMembershipDenied::class);
+$reject(fn()=> $service->status('private', null), ProjectNotFoundException::class);
+$reject(fn()=> $service->join('open', 3), ProjectMembershipDenied::class);
+$reject(fn()=> $service->join('open', 999), ProjectMembershipDenied::class);
+$audit->fail = true;
+$reject(fn()=> $service->join('open', 4), RuntimeException::class);
+$check((int)$pdo->query('SELECT COUNT(*) FROM user_projects WHERE user_id=4')->fetchColumn() === 0, 'Failed audit rolls back membership');
+$audit->fail = false;
+$repo->update('open', null, null, null, null, null, false);
+$check(!$service->status('open', ['id'=>4])['can_join'], 'Closing recruitment removes eligibility');
+$reject(fn()=> $service->join('open', 4), ProjectMembershipDenied::class);
+$check($service->join('open', 1)['is_member'], 'Existing membership remains when recruitment closes');
+$pdo->exec("UPDATE projects SET enabled=0 WHERE app_key='closed'");
+$reject(fn()=> $service->join('closed', 4), ProjectNotFoundException::class);
+$reject(fn()=> $service->status('closed', null), ProjectNotFoundException::class);
+$pdo->exec("INSERT INTO user_projects VALUES (1, {$closed['id']}, 'contributor', UTC_TIMESTAMP())");
+$check($service->status('closed', ['id'=>1])['is_member'] && !$service->status('closed', ['id'=>1])['can_join'], 'Existing members can check a disabled project for leaving without opening recruitment');
+$repo->delete('open');
+$reject(fn()=> $service->join('open', 4), ProjectNotFoundException::class);
+echo "Project recruitment and self-join: ok\n";

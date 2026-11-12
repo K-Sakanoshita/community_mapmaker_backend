@@ -40,6 +40,7 @@ $adminRepo = new CommunityMapMaker\Auth\AdminUserRepository($pdo);
 $userId = (int)$pdo->query('SELECT id FROM users LIMIT 1')->fetchColumn();
 $repo = new ActivityRepository($pdo);
 $apps = ['test' => ['schema' => ['fields' => []]], 'other' => ['schema' => ['fields' => []]]];
+$apps['batch'] = ['schema' => ['fields' => []]];
 $schema = new ActivitySchema($apps);
 $tx = new class($pdo) implements TransactionManagerInterface {
     public function __construct(private PDO $pdo) {}
@@ -181,3 +182,34 @@ $pdo->exec('DELETE FROM users WHERE id=900000002');
 $check($service->find('test', 'editor/1')['updated_by_userid'] === null, 'Missing editor account must return null without dropping the activity');
 $check($service->list('test', 'node/900')[0]['updated_by_userid'] === null, 'Legacy unrecorded editor must return null');
 echo "Activity editor metadata tests passed.\n";
+
+// Cursor batches remain stable when timestamps change; inserts after page one wait for reload.
+if (!$pdo->query("SHOW INDEX FROM activities WHERE Key_name='idx_activities_app_active_id'")->fetch()) {
+    $pdo->exec(file_get_contents(dirname(__DIR__) . '/migrations/011_activity_cursor_index.sql'));
+}
+for ($i = 0; $i < 205; $i++) $repo->create('batch', 'batch/' . $i, null, 'node/' . ($i + 1), ['name' => 'row ' . $i]);
+$repo->delete('batch', 'batch/50');
+$first = $service->listBatch('batch', ['batch' => '1', 'limit' => '100']);
+$check(count($first['items']) === 100 && $first['next_cursor'] !== null, 'First batch is bounded with a continuation');
+$check($first['items'][0]['id'] === 'batch/204', 'Batch uses stable descending internal IDs');
+$repo->create('batch', 'batch/new', null, 'node/9999', []);
+$repo->update('batch', 'batch/1', null, 'node/2', ['name' => 'changed during paging']);
+$all = $first['items']; $cursor = $first['next_cursor']; $sizes = [count($all)];
+while ($cursor !== null) {
+    $part = $service->listBatch('batch', ['batch' => '1', 'limit' => '100', 'cursor' => $cursor]);
+    $sizes[] = count($part['items']); $all = array_merge($all, $part['items']); $cursor = $part['next_cursor'];
+}
+$ids = array_column($all, 'id');
+$check($sizes === [100, 100, 4], 'Final batch and termination are exact');
+$expected = array_map(fn($i) => 'batch/' . $i, array_reverse(array_values(array_diff(range(0, 204), [50]))));
+$check($ids === $expected, 'No duplicates, omissions, deleted rows, cross-project rows, or new inserts');
+$check($all[202]['name'] === 'changed during paging', 'Existing edits do not move the pagination boundary');
+$check(count($service->list('batch')) === 205, 'Legacy list still returns an array containing all current records');
+$check($service->listBatch('batch', ['batch' => '1', 'cursor' => '1']) === ['items' => [], 'next_cursor' => null], 'Empty batch terminates');
+foreach (['', '0', '-1', '1e2', '1.5', '99999999999999999999999', []] as $invalid) {
+    $throws(fn() => $service->listBatch('batch', ['batch' => '1', 'cursor' => $invalid]), CommunityMapMaker\Activity\ActivityValidationException::class);
+}
+foreach ([['batch' => '0'], ['cursor' => '1'], ['batch' => '1', 'limit' => '101'], ['batch' => '1', 'format' => 'csv'], ['batch' => '1', 'bbox' => '0,0,1,1'], ['batch' => '1', 'id' => 'batch/1']] as $invalid) {
+    $throws(fn() => $service->listBatch('batch', $invalid), CommunityMapMaker\Activity\ActivityValidationException::class);
+}
+echo "Cursor Activity batches: ok\n";

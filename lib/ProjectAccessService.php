@@ -39,7 +39,7 @@ final class ProjectAccessService
         $visible = [];
         foreach ($projects as $project) {
             $appKey = (string)($project['app_key'] ?? '');
-            if (!isset($roles[$appKey])) continue;
+            if (!isset($roles[$appKey]) || $roles[$appKey] === 'banned') continue;
             $visible[] = $project + ['access_role' => $roles[$appKey]];
         }
         return $visible;
@@ -78,6 +78,7 @@ final class ProjectAccessService
 
     public function assertCanWrite(array $user, string $appKey): void
     {
+        $this->assertCanUseConsole($user);
         if (($user['role'] ?? 'user') === 'admin') return;
         $role = $this->projects->roleForUser((int)$user['id'], $appKey);
         if ($role === null) throw new ProjectAccessDeniedException('The project is not assigned to this user.');

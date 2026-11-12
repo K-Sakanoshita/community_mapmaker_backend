@@ -1,41 +1,34 @@
 # さくらのレンタルサーバへの配置
 
-このリポジトリは、ローカル開発ではリポジトリ直下をそのまま実行できますが、本番では Git 作業ツリーと DB 設定を Web 公開フォルダーに置かない構成を推奨します。
+公開するファイルはリポジトリ内の `www/` にまとめています。リポジトリ自体は `/home/ACCOUNT/` 配下の非公開フォルダーに置き、`www/` の中身だけをサーバーの公開フォルダーへコピーします。
 
-## 推奨フォルダー構成
+## フォルダー構成
 
 ```text
 /home/ACCOUNT/
-├── community_mapmaker_backend/          # Git clone。Web 非公開
-│   ├── index.html, portal.css, portal.js
-│   ├── register.html, verify-email.html
-│   ├── admin/
-│   ├── api/
-│   ├── auth/
-│   ├── config/
-│   │   ├── config.php                   # 本番設定・秘密情報
-│   │   └── activity-schemas/
-│   ├── lib/
-│   ├── migrations/
-│   ├── scripts/
-│   ├── bootstrap.php
-│   ├── reset-password.html
-│   └── schema.sql
+├── community_mapmaker_backend/          # Git clone。非公開
+│   ├── www/                            # 公開用ファイルの原本
+│   │   ├── index.html, *.css, *.js, 画像
+│   │   ├── admin/, en/, ja/             # 管理画面・言語別ページ
+│   │   ├── api/, auth/                 # HTTPエンドポイント
+│   │   ├── _runtime.php                # 非公開PHPの参照先
+│   │   └── .htaccess
+│   ├── bootstrap.php                   # DB接続・サービス初期化
+│   ├── lib/                            # 共通PHP処理
+│   ├── config/                         # 設定・秘密情報・Schema
+│   ├── var/                            # ローカル運用データ（使用時）
+│   ├── schema.sql, migrations/         # DB作成・更新
+│   └── scripts/, tests/, docker/, docs/
 └── www/
-    └── community-mapmaker-backend/      # Web 公開側
-        ├── .htaccess
-        ├── admin/
-        ├── api/
-        ├── auth/
-        ├── reset-password.html          # メールから開くパスワード再設定画面
-        ├── bootstrap.php                # PHP include 用。HTTP 直接アクセスは禁止
-        ├── config/
-        │   ├── .htaccess
-        │   └── config.php               # 非公開側 config.php を読むだけのブリッジ
-        └── lib/                         # PHP include 用。HTTP 直接アクセスは禁止
+    └── community-mapmaker-backend/      # サーバーの公開フォルダー
+        ├── index.html, *.css, *.js, 画像
+        ├── admin/, en/, ja/
+        ├── api/, auth/
+        ├── _runtime.php                # 非公開側の絶対パスを自動生成
+        └── .htaccess
 ```
 
-`config/config.php` の実体、migration、schema、テスト、Docker 関連ファイルは `www` の外に残します。
+`bootstrap.php`、`lib/`、`config/` はサーバーの公開フォルダーには置きません。`_runtime.php` は参照先だけを定義し、秘密値をコピーしません。API・ページの公開URLは従来どおりです。非公開リポジトリは、公開コピーを配置した後もPHP実行に必要です。
 
 ## 初回配置
 
@@ -59,7 +52,7 @@ vi config/config.php
 - DB の DSN、ユーザー、パスワード
 - `auth.verification_url`
 - `auth.password_reset_url`
-- `auth.allowed_origins`
+- `auth.allowed_origins`（別ドメインのWebサイトからAPIを利用する場合。同一Originは自動許可）
 - `auth.rate_limit_secret`
 - `mail.from_address`
 - `mail.from_name`
@@ -99,16 +92,14 @@ chmod +x scripts/deploy-sakura.sh
 
 ## deploy-sakura.sh が行うこと
 
-- `index.html`、`portal.css`、`portal.js`、`register.html`、`verify-email.html`、`admin/`、`api/`、`auth/` を公開側へコピー
-- `reset-password.html` を公開側へコピー
-- PHP 実行に必要な `bootstrap.php` と `lib/` を公開側へコピー
-- `config/config.php` の実体は Git 作業ツリー側に残す
-- 公開側には、非公開側の `config/config.php` を `require` するだけのブリッジを生成
-- `.htaccess` で `bootstrap.php`、`lib/`、`config/` への直接 HTTP アクセスを拒否
-- ディレクトリ一覧表示を無効化
-- さくらの設置条件に合わせ、公開側の PHP ファイルを 755、その他の通常ファイルを 644、ディレクトリを 755 に設定
+- リポジトリの `www/` の中身だけを公開先へコピー
+- 公開側の `_runtime.php` に非公開リポジトリと設定ファイルの絶対パスを設定
+- `CMM_SAKURA_CONFIG_FILE` 未指定時は非公開側の `config/config.php` を利用
+- 旧構成の公開側 `bootstrap.php`、`lib/`、`config/` を削除
+- `.htaccess` でディレクトリ一覧と `_runtime.php` の直接アクセスを拒否
+- 公開側のPHPファイルを755、その他の通常ファイルを644、ディレクトリを755に設定
 
-PHP からの `require` は `.htaccess` の HTTP アクセス制限の影響を受けないため、API 自体は従来の相対パスのまま動作します。
+公開先が非公開リポジトリの内部や親フォルダーに当たる場合、または実設定が公開先の内部にある場合は、配置を中止します。公開先はこのアプリ専用のフォルダーを指定してください。
 
 ポータルのOGP画像・説明文プレビューにはPHPの`curl`拡張が必要です。利用できない環境ではProjectカードの代替画像を表示し、地図へのリンクは引き続き利用できます。
 
@@ -137,7 +128,7 @@ git pull
 ./scripts/deploy-sakura.sh "$HOME/www/community-mapmaker-backend"
 ```
 
-`admin/`、`api/`、`auth/`、`lib/` は毎回入れ替えるため、削除済みファイルが公開側に残りません。`reset-password.html` も再配置されます。`config/config.php` の実体は非公開側にあるため、再配置で上書きされません。
+`admin/`、`api/`、`auth/`、`en/`、`ja/` は毎回入れ替えるため、削除済みファイルが公開側に残りません。`reset-password.html` も再配置されます。`config/config.php` の実体は非公開側にあるため、再配置で上書きされません。
 
 ## 動作確認
 
@@ -153,7 +144,7 @@ https://YOUR_HOST/community-mapmaker-backend/reset-password.html
 
 `reset-password.html` を token なしで直接開いた場合は、無効な URL である旨を表示します。通常はパスワード再設定メールのリンクから開いてください。
 
-次の URL は HTTP 403 になることを確認してください。
+次の非公開ファイルの URL は HTTP 404（サーバー側の拒否設定がある場合は403）になることを確認してください。
 
 ```text
 https://YOUR_HOST/community-mapmaker-backend/bootstrap.php
@@ -161,17 +152,18 @@ https://YOUR_HOST/community-mapmaker-backend/lib/Database.php
 https://YOUR_HOST/community-mapmaker-backend/config/config.php
 ```
 
+`_runtime.php` への直接アクセスはHTTP 403になります。
+
 API が HTTP 500 の場合は、さくらのコントロールパネルのエラーログと PHP バージョン、PDO MySQL の有効化、DB 接続情報を確認してください。
 
 書き込み API の Basic 認証だけ失敗する場合は PHP の動作モードも確認してください。さくらの仕様上、PHP による HTTP 認証はモジュールモードで利用可能と案内されています。このバックエンドは `Authorization` / `REDIRECT_HTTP_AUTHORIZATION` も読み取りますが、サーバー側で Authorization ヘッダーが PHP に渡らない構成では認証できません。
 
 ## 補足
 
-さくらのレンタルサーバでは `.htaccess` と `mod_rewrite` を利用できますが、`Options FollowSymlinks` は利用できません。そのため、この手順は公開側をシンボリックリンクだけで構成せず、必要なランタイムファイルをコピーする方式にしています。
-
-
 ### 画像サムネイルAPI
 
 `api/thumbnail.php`にはPHPのGD・cURLが必要です。`extension_loaded('gd')`、`extension_loaded('curl')`と`gd_info()`で実サーバの対応形式を確認してください。GDがWebPに対応していない場合はJPEG／透過PNGで生成します。EXIF拡張が有効ならJPEGの向きを補正します。Imagickは不要です。
 
 `activity.thumbnail.cache_dir`を設定する場合はWeb公開ディレクトリの外の、PHPが書き込める専用ディレクトリを指定してください。未設定時はシステム一時ディレクトリを使います。共有サーバーへの負荷を抑えるため、同じ画像を重複生成せず、別画像の生成は同じキャッシュ保存先につき最大2件に制限し、容量・画素数・取得時間・生成回数の上限を設けています。API仕様・制限は[APIリファレンス](docs/api-reference.md#画像サムネイルapi)を参照してください。
+
+さくらのレンタルサーバでは `.htaccess` と `mod_rewrite` を利用できますが、`Options FollowSymlinks` は利用できません。そのため、この手順は公開側をシンボリックリンクだけで構成せず、必要なランタイムファイルをコピーする方式にしています。

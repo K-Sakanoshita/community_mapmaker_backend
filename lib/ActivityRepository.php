@@ -10,6 +10,15 @@ use RuntimeException;
 
 final class ActivityRepository implements ActivityRepositoryInterface
 {
+    /** A public count and update timestamp; never expose arbitrary post fields or user data. */
+    public function publicParkSummary(string $appKey, string $osmid): array
+    {
+        $statement = $this->pdo->prepare('SELECT COUNT(*) AS activity_count, MAX(updated_at) AS updated_at FROM activities WHERE app_key = :app AND osmid = :osmid AND is_deleted = 0');
+        $statement->execute([':app' => $appKey, ':osmid' => $osmid]);
+        $row = $statement->fetch();
+        return ['activity_count' => (int)$row['activity_count'], 'updated_at' => $row['updated_at'] === null ? null : str_replace(' ', 'T', $row['updated_at']) . 'Z'];
+    }
+
     public function __construct(private PDO $pdo)
     {
     }
@@ -23,7 +32,11 @@ final class ActivityRepository implements ActivityRepositoryInterface
             $sql .= ' AND osmid = :osmid';
             $params[':osmid'] = $osmid;
         }
-        $sql .= ' ORDER BY updated_at DESC, id DESC';
+        if (isset($options['before_id'])) {
+            $sql .= ' AND id < :before_id';
+            $params[':before_id'] = $options['before_id'];
+        }
+        $sql .= ($options['batch'] ?? false) ? ' ORDER BY id DESC' : ' ORDER BY updated_at DESC, id DESC';
         $statement = $this->pdo->prepare($this->listSql($sql, $options));
         $statement->execute($params);
         return array_map(fn(array $row): array => $this->decode($row), $statement->fetchAll());

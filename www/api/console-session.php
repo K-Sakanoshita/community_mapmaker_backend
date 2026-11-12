@@ -1,0 +1,43 @@
+<?php
+declare(strict_types=1);
+
+require_once dirname(__DIR__) . '/_runtime.php';
+
+use CommunityMapMaker\Activity\ActivityApi;
+use CommunityMapMaker\Auth\Http;
+
+$container = require CMM_PRIVATE_ROOT . '/bootstrap.php';
+require_once CMM_PRIVATE_ROOT . '/lib/ActivityApi.php';
+Http::requireMethods(['GET', 'POST', 'DELETE']);
+
+ActivityApi::run(function () use ($container): array {
+    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    if ($method !== 'GET' && ($_SERVER['HTTP_X_CONSOLE_SESSION'] ?? '') !== '1') {
+        return [403, ['code' => 'console_header_required']];
+    }
+    if ($method === 'DELETE') {
+        \CommunityMapMaker\Auth\ConsoleSession::destroy();
+        return [200, ['status' => 'ok']];
+    }
+    $user = ActivityApi::requireAuthentication($container);
+    $container['project_access']->assertCanUseConsole($user);
+    if ($method === 'POST') {
+        \CommunityMapMaker\Auth\ConsoleSession::establish($container['user_repo']->findById((int)$user['id']));
+    }
+    $identity = [
+        'id' => (int)$user['id'],
+        'userid' => (string)$user['userid'],
+        'role' => (string)($user['role'] ?? 'user'),
+    ];
+    if ($method === 'GET' && ($_GET['summary'] ?? '') === '1') {
+        return [200, ['user' => $identity]];
+    }
+    $projects = $container['project_repo']->withPublicSummaries($container['project_access']->visibleConsoleProjects(
+        $user,
+        $container['project_service']->list()
+    ));
+    return [200, [
+        'user' => $identity,
+        'projects' => $projects,
+    ]];
+});

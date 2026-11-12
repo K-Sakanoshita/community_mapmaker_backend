@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace CommunityMapMaker\Activity;
 
+require_once __DIR__ . '/PageRendering.php';
+
 use JsonException;
 use PDO;
 use PDOException;
@@ -16,7 +18,7 @@ final class ProjectRepository implements ProjectRepositoryInterface
 
     public function list(bool $onlyEnabled = false): array
     {
-        $sql = 'SELECT id, app_key, project_name, frontend_url, frontend_public, schema_json, enabled, created_by_user_id, created_at, updated_at FROM projects WHERE is_deleted = 0';
+        $sql = 'SELECT id, app_key, project_name, frontend_url, frontend_public, recruiting, page_rendering_json, schema_json, enabled, created_by_user_id, created_at, updated_at FROM projects WHERE is_deleted = 0';
         if ($onlyEnabled) $sql .= ' AND enabled = 1';
         $sql .= ' ORDER BY updated_at DESC, id DESC';
         $statement = $this->pdo->query($sql);
@@ -38,6 +40,26 @@ final class ProjectRepository implements ProjectRepositoryInterface
         $counts = [];
         foreach ($statement->fetchAll() as $row) $counts[$row['app_key']] = (int)$row['activity_count'];
         foreach ($projects as &$project) $project['activity_count'] = $counts[$project['app_key']] ?? 0;
+        unset($project);
+        return $projects;
+    }
+
+    /** Public contributor names only; never expose account email or other profile fields. */
+    public function withPublicSummaries(array $projects): array
+    {
+        $projects = $this->withActivityCounts($projects);
+        if ($projects === []) return [];
+        $keys = array_values(array_unique(array_column($projects, 'app_key')));
+        $placeholders = implode(', ', array_fill(0, count($keys), '?'));
+        $statement = $this->pdo->prepare(
+            "SELECT DISTINCT a.app_key, u.userid FROM activities a "
+            . "INNER JOIN users u ON u.id IN (a.created_by_user_id, a.updated_by_user_id) "
+            . "WHERE a.is_deleted = 0 AND a.app_key IN ($placeholders) ORDER BY a.app_key, u.userid"
+        );
+        $statement->execute($keys);
+        $contributors = [];
+        foreach ($statement->fetchAll() as $row) $contributors[$row['app_key']][] = $row['userid'];
+        foreach ($projects as &$project) $project['contributors'] = $contributors[$project['app_key']] ?? [];
         unset($project);
         return $projects;
     }
@@ -88,7 +110,7 @@ final class ProjectRepository implements ProjectRepositoryInterface
     public function find(string $appKey): ?array
     {
         $statement = $this->pdo->prepare(
-            'SELECT id, app_key, project_name, frontend_url, frontend_public, schema_json, enabled, is_deleted, created_by_user_id, created_at, updated_at '
+            'SELECT id, app_key, project_name, frontend_url, frontend_public, recruiting, page_rendering_json, schema_json, enabled, is_deleted, created_by_user_id, created_at, updated_at '
             . 'FROM projects WHERE app_key = :app_key LIMIT 1'
         );
         $statement->execute([':app_key' => $appKey]);
@@ -96,12 +118,12 @@ final class ProjectRepository implements ProjectRepositoryInterface
         return $row === false ? null : $this->decode($row);
     }
 
-    public function create(string $appKey, string $projectName, array $schema, bool $enabled = true, ?string $frontendUrl = null, bool $frontendPublic = false, ?int $createdByUserId = null): array
+    public function create(string $appKey, string $projectName, array $schema, bool $enabled = true, ?string $frontendUrl = null, bool $frontendPublic = false, ?int $createdByUserId = null, bool $recruiting = false, ?array $pageRendering = null): array
     {
         $now = gmdate('Y-m-d H:i:s');
         $statement = $this->pdo->prepare(
-            'INSERT INTO projects (app_key, project_name, frontend_url, frontend_public, schema_json, enabled, created_by_user_id, created_at, updated_at) '
-            . 'VALUES (:app_key, :project_name, :frontend_url, :frontend_public, :schema_json, :enabled, :created_by_user_id, :created_at, :updated_at)'
+            'INSERT INTO projects (app_key, project_name, frontend_url, frontend_public, recruiting, page_rendering_json, schema_json, enabled, created_by_user_id, created_at, updated_at) '
+            . 'VALUES (:app_key, :project_name, :frontend_url, :frontend_public, :recruiting, :page_rendering_json, :schema_json, :enabled, :created_by_user_id, :created_at, :updated_at)'
         );
         try {
             $statement->execute([
@@ -109,6 +131,8 @@ final class ProjectRepository implements ProjectRepositoryInterface
                 ':project_name' => $projectName,
                 ':frontend_url' => $frontendUrl,
                 ':frontend_public' => $frontendPublic ? 1 : 0,
+                ':recruiting' => $recruiting ? 1 : 0,
+                ':page_rendering_json' => $this->encode($pageRendering ?? PageRendering::defaults()),
                 ':schema_json' => $this->encode($schema),
                 ':enabled' => 1,
                 ':created_by_user_id' => $createdByUserId,
@@ -125,7 +149,7 @@ final class ProjectRepository implements ProjectRepositoryInterface
             ?? throw new RuntimeException('Created project could not be loaded.');
     }
 
-    public function update(string $appKey, ?string $projectName, ?array $schema, ?bool $enabled = null, ?string $frontendUrl = null, ?bool $frontendPublic = null): ?array
+    public function update(string $appKey, ?string $projectName, ?array $schema, ?bool $enabled = null, ?string $frontendUrl = null, ?bool $frontendPublic = null, ?bool $recruiting = null, ?array $pageRendering = null): ?array
     {
         $current = $this->find($appKey);
         if ($current === null) return null;
@@ -137,13 +161,15 @@ final class ProjectRepository implements ProjectRepositoryInterface
         $isEnabled = 1;
 
         $statement = $this->pdo->prepare(
-            'UPDATE projects SET project_name = :project_name, frontend_url = :frontend_url, frontend_public = :frontend_public, schema_json = :schema_json, enabled = :enabled, updated_at = :updated_at '
+            'UPDATE projects SET project_name = :project_name, frontend_url = :frontend_url, frontend_public = :frontend_public, recruiting = :recruiting, page_rendering_json = :page_rendering_json, schema_json = :schema_json, enabled = :enabled, updated_at = :updated_at '
             . 'WHERE app_key = :app_key AND is_deleted = 0'
         );
         $statement->execute([
             ':project_name' => $name,
             ':frontend_url' => $url,
             ':frontend_public' => $isPublic ? 1 : 0,
+            ':recruiting' => ($recruiting ?? $current['recruiting']) ? 1 : 0,
+            ':page_rendering_json' => $this->encode($pageRendering ?? $current['page_rendering']),
             ':schema_json' => $this->encode($schemaData),
             ':enabled' => $isEnabled,
             ':updated_at' => gmdate('Y-m-d H:i:s'),
@@ -178,8 +204,10 @@ final class ProjectRepository implements ProjectRepositoryInterface
         $row['is_deleted'] = (bool)($row['is_deleted'] ?? false);
         $row['frontend_url'] = $row['frontend_url'] === null ? null : (string)$row['frontend_url'];
         $row['frontend_public'] = (bool)$row['frontend_public'];
+        $row['recruiting'] = (bool)($row['recruiting'] ?? false);
         $row['created_by_user_id'] = $row['created_by_user_id'] === null ? null : (int)$row['created_by_user_id'];
-        unset($row['schema_json']);
+        $row['page_rendering'] = array_replace(PageRendering::defaults(), json_decode($row['page_rendering_json'] ?? '{}', true, 32, JSON_THROW_ON_ERROR) ?? []);
+        unset($row['schema_json'], $row['page_rendering_json']);
         return $row;
     }
 }

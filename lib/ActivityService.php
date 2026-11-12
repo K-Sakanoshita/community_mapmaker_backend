@@ -18,7 +18,8 @@ final class ActivityService
     public function __construct(
         private ActivityRepositoryInterface $repository,
         private ActivitySchema $schema,
-        private ?TransactionManagerInterface $transactions = null
+        private ?TransactionManagerInterface $transactions = null,
+        private ?OsmCoordinateResolverInterface $coordinateResolver = null
     ) {
     }
 
@@ -28,6 +29,37 @@ final class ActivityService
         if ($osmid !== null) $this->validateOsmid($osmid);
         $options = $this->listOptions($input);
         return $this->listOutput($this->repository->list($appKey, $osmid, $options), $options);
+    }
+
+    public function listBatch(string $appKey, array $input): array
+    {
+        $this->schema->appConfig($appKey);
+        foreach (['id', 'osmid', 'osmids', 'bbox', 'updated_since', 'summary'] as $parameter) {
+            if (array_key_exists($parameter, $input)) {
+                throw new ActivityValidationException([$parameter => 'Cannot combine with batch.']);
+            }
+        }
+        if (($input['batch'] ?? null) !== '1' || ($input['format'] ?? 'json') !== 'json') {
+            throw new ActivityValidationException(['batch' => 'Expected batch=1 with JSON output.']);
+        }
+        $options = $this->listOptions($input);
+        $limit = $options['limit'] ?? 100;
+        $options = ['batch' => true, 'limit' => $limit + 1];
+        if (array_key_exists('cursor', $input)) {
+            $cursor = $input['cursor'];
+            if (!is_string($cursor) || !preg_match('/\A[1-9][0-9]*\z/', $cursor)
+                || filter_var($cursor, FILTER_VALIDATE_INT) === false) {
+                throw new ActivityValidationException(['cursor' => 'Expected a positive integer cursor.']);
+            }
+            $options['before_id'] = (int)$cursor;
+        }
+        $rows = $this->repository->list($appKey, null, $options);
+        $hasMore = count($rows) > $limit;
+        $rows = array_slice($rows, 0, $limit);
+        return [
+            'items' => $this->listOutput($rows, []),
+            'next_cursor' => $hasMore ? (string)$rows[count($rows) - 1]['id'] : null,
+        ];
     }
 
     public function listSelected(string $appKey, array $input): array
@@ -234,7 +266,7 @@ final class ActivityService
         });
     }
 
-    public function import(string $appKey, array $rows, bool $dryRun = true, ?array $previewFields = null, ?int $actorUserId = null): array
+    public function import(string $appKey, array $rows, bool $dryRun = true, ?array $previewFields = null, ?int $actorUserId = null, bool $resolveCoordinates = false): array
     {
         $this->schema->appConfig($appKey);
         if (count($rows) > 5000) throw new ActivityValidationException(['rows' => 'At most 5000 activities can be imported at once.']);
@@ -261,6 +293,7 @@ final class ActivityService
             }
         }
 
+        $lookup = $resolveCoordinates && $this->coordinateResolver !== null ? $this->fillImportCoordinates($prepared) : null;
         $created = 0;
         $updated = 0;
         $apply = function () use ($appKey, $prepared, $dryRun, $actorUserId, &$created, &$updated): void {
@@ -284,7 +317,35 @@ final class ActivityService
         };
         if (!$dryRun && $this->transactions !== null) $this->transactions->run($apply);
         else $apply();
-        return ['valid' => count($prepared), 'created' => $created, 'updated' => $updated, 'dry_run' => $dryRun];
+        return ['valid' => count($prepared), 'created' => $created, 'updated' => $updated, 'dry_run' => $dryRun]
+            + ($lookup === null ? [] : ['coordinate_lookup'=>$lookup]);
+    }
+
+    private function fillImportCoordinates(array &$prepared): array
+    {
+        $targets = []; $preserved = 0;
+        foreach ($prepared as $index => &$item) {
+            if ($item['coordinates'] !== null && $item['coordinates']['latitude'] !== null) continue;
+            $existing = $item['existing'];
+            if ($existing !== null && $existing['osmid'] === $item['osmid']
+                && isset($existing['latitude'], $existing['longitude'])) {
+                $item['coordinates'] = ['latitude'=>(float)$existing['latitude'], 'longitude'=>(float)$existing['longitude']];
+                $preserved++; continue;
+            }
+            $targets[$index] = $item['osmid'];
+        }
+        unset($item);
+        $points = $this->coordinateResolver->resolve(array_values(array_unique($targets)));
+        $filled = 0; $unresolved = [];
+        foreach ($targets as $index => $osmid) {
+            if (isset($points[$osmid])) { $prepared[$index]['coordinates'] = $points[$osmid]; $filled++; }
+            else {
+                // An OSM ID change must not retain coordinates for the previous feature.
+                $prepared[$index]['coordinates'] = ['latitude'=>null,'longitude'=>null];
+                $unresolved[] = ['row'=>$index, 'osmid'=>$osmid];
+            }
+        }
+        return ['filled'=>$filled, 'preserved'=>$preserved, 'unresolved'=>$unresolved];
     }
 
     private function appFrom(array $input): string
@@ -316,7 +377,7 @@ final class ActivityService
         $hasLatitude = array_key_exists('latitude', $input);
         $hasLongitude = array_key_exists('longitude', $input);
         if (!$hasLatitude && !$hasLongitude) return null;
-        if (!$hasLatitude || !$hasLongitude) {
+        if (!$hasLatitude || !$hasLongitude || (($input['latitude'] === null) !== ($input['longitude'] === null))) {
             throw new ActivityValidationException(['coordinates' => 'Latitude and longitude must be supplied together.']);
         }
         if ($input['latitude'] === null && $input['longitude'] === null) {
@@ -336,6 +397,7 @@ final class ActivityService
 
     private function validateOsmid(string $osmid): void
     {
+        if ($osmid === '') throw new ActivityValidationException(['osmid' => 'OSM ID is required.']);
         if (!preg_match('/\A(?:node|way|relation)\/[1-9][0-9]{0,18}\z/', $osmid)) {
             throw new ActivityValidationException(['osmid' => 'OSM ID must look like node/123, way/456, or relation/789.']);
         }

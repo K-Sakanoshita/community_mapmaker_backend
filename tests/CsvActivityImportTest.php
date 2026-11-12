@@ -44,8 +44,26 @@ csvAssert($legacy['normalizations'] === ['actdate' => 1, 'new_date' => 1], 'Date
 csvAssert($legacy['schema_candidate']['fields']['new_date']['type'] === 'date', 'Slash-formatted date columns must be inferred as dates.');
 csvAssert($legacy['schema_candidate']['fields']['score']['options'] === ['act_score_1', 'act_score_6'], 'Observed select values must extend the schema candidate.');
 csvAssert($legacy['schema_candidate']['fields']['good_points']['options'] === ['act_good_points_1', 'act_good_points_10'], 'Observed checkbox values must extend the schema candidate.');
-csvAssert($legacy['schema_candidate']['fields']['picture_url1']['type'] === 'wikimedia', 'URL fields containing File references must become Wikimedia candidates.');
+csvAssert($legacy['schema_candidate']['fields']['picture_url1']['type'] === 'image', 'URL fields containing File references must become image candidates.');
 csvAssert($legacy['schema_update_fields'] === ['new_date', 'score', 'good_points', 'picture_url1'], 'Missing and changed fields must be listed for schema application.');
+csvAssert($legacy['schema_changes']['picture_url1']['type'] === ['from' => 'url', 'to' => 'image'], 'CSV type changes must use image.');
+$images = $parser->parse('town-map', "id,photo\nI/1,File:Park.jpg\nI/2,Park.png\n");
+csvAssert($images['schema_candidate']['fields']['photo']['type'] === 'image', 'New image reference columns must infer image.');
+csvAssert($images['rows'][0]['photo'] === 'File:Park.jpg', 'Image references must remain unchanged.');
+
+foreach (['2023-4-22' => '2023-04-22', '2023-04-2' => '2023-04-02', '2023/4/2' => '2023-04-02', '2024-2-29' => '2024-02-29'] as $input => $expected) {
+    $dates = $legacyParser->parse('playgrounds', "id,actdate,new_date\nD/1,$input,$input\n");
+    csvAssert($dates['rows'][0]['actdate'] === $expected, 'Existing date columns must normalize unpadded dates: ' . $input);
+    csvAssert($dates['schema_candidate']['fields']['new_date']['type'] === 'date' && $dates['rows'][0]['new_date'] === $expected, 'New columns must infer and normalize unpadded dates: ' . $input);
+    csvAssert($dates['normalizations'] === ['actdate' => 1, 'new_date' => 1], 'Unpadded date normalization counts must be reported.');
+    $legacySchema->validate('playgrounds', ['actdate' => $dates['rows'][0]['actdate']], false);
+}
+foreach (['2023-2-29', '2023-4-31', '2023-13-1'] as $input) {
+    $dates = $legacyParser->parse('playgrounds', "id,actdate,new_date\nD/1,$input,$input\n");
+    csvAssert($dates['rows'][0]['actdate'] === $input && $dates['normalizations'] === [], 'Invalid calendar dates must not be normalized.');
+    csvAssert($dates['schema_candidate']['fields']['new_date']['type'] === 'text', 'Invalid calendar dates must not infer date columns.');
+    csvThrows(fn() => $legacySchema->validate('playgrounds', ['actdate' => $dates['rows'][0]['actdate']], false), 'Invalid imported dates must still fail validation.');
+}
 
 $coordinates = $parser->parse('town-map', "id,osmid,latitude,longitude\nC/1,node/1,34.8512345,135.6178901\nC/2,node/2,,\n");
 csvAssert($coordinates['schema_candidate']['fields'] === [] && $coordinates['missing_fields'] === [], 'Coordinate columns must not become schema fields.');
@@ -54,3 +72,17 @@ csvAssert($coordinates['rows'][1]['latitude'] === null && $coordinates['rows'][1
 csvAssert(!array_key_exists('latitude', $parsed['rows'][0]), 'Legacy CSV leaves coordinates omitted.');
 
 echo "CsvActivityImport behavior: ok\n";
+
+// Report physical CSV line numbers, not compacted indexes, for blank/multiline records.
+$withLines=$parser->parse('town-map',"id,osmid,title\r\nA/1,node/1,\"two\r\nlines\"\r\n\r\nA/2,,bad\r\n");
+csvAssert($withLines['row_lines']===[2,5],'Blank lines and quoted newlines must count in reported source line numbers.');
+$mapped=CsvActivityImport::errorsWithLineNumbers(['rows.1'=>['osmid'=>'OSM ID is required.']],$withLines['row_lines']);
+csvAssert($mapped===['csv_rows.5'=>['osmid'=>'OSM ID is required.']],'Nested validation errors retain the field and source line.');
+csvAssert(CsvActivityImport::errorsWithLineNumbers(['rows.0.id'=>'Activity ID is required for import.'],[9])===['csv_rows.9.id'=>'Activity ID is required for import.'],'Flat error paths also map to CSV lines.');
+try {
+    $parser->parse('town-map',"id,osmid\n\nA/1,node/1,extra\n");
+    throw new RuntimeException('Expected extra-cell error.');
+} catch (ActivityValidationException $error) {
+    csvAssert(isset($error->errors['csv_rows.3']),'CSV syntax errors identify the physical line too.');
+}
+echo "CSV validation source line mapping: ok\n";

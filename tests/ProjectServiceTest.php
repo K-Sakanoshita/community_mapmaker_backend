@@ -18,18 +18,20 @@ final class MemoryProjects implements ProjectRepositoryInterface
     public function list(bool $onlyEnabled = false): array { return array_values(array_filter($this->rows, fn(array $row): bool => !$row['is_deleted'] && (!$onlyEnabled || $row['enabled']))); }
     public function deletedKeys(): array { return array_keys(array_filter($this->rows, fn(array $row): bool => $row['is_deleted'])); }
     public function find(string $appKey): ?array { return $this->rows[$appKey] ?? null; }
-    public function create(string $appKey, string $projectName, array $schema, bool $enabled = true, ?string $frontendUrl = null, bool $frontendPublic = false, ?int $createdByUserId = null): array
+    public function create(string $appKey, string $projectName, array $schema, bool $enabled = true, ?string $frontendUrl = null, bool $frontendPublic = false, ?int $createdByUserId = null, bool $recruiting = false, ?array $pageRendering = null): array
     {
         if (isset($this->rows[$appKey])) throw new DuplicateProjectException();
-        return $this->rows[$appKey] = ['id' => count($this->rows) + 1, 'app_key' => $appKey, 'project_name' => $projectName, 'frontend_url' => $frontendUrl, 'frontend_public' => $frontendPublic, 'schema' => $schema, 'enabled' => $enabled, 'is_deleted' => false, 'created_by_user_id' => $createdByUserId, 'created_at' => 'now', 'updated_at' => 'now'];
+        return $this->rows[$appKey] = ['id' => count($this->rows) + 1, 'app_key' => $appKey, 'project_name' => $projectName, 'frontend_url' => $frontendUrl, 'frontend_public' => $frontendPublic, 'recruiting' => $recruiting, 'page_rendering' => $pageRendering ?? \CommunityMapMaker\Activity\PageRendering::defaults(), 'schema' => $schema, 'enabled' => $enabled, 'is_deleted' => false, 'created_by_user_id' => $createdByUserId, 'created_at' => 'now', 'updated_at' => 'now'];
     }
-    public function update(string $appKey, ?string $projectName, ?array $schema, ?bool $enabled = null, ?string $frontendUrl = null, ?bool $frontendPublic = null): ?array
+    public function update(string $appKey, ?string $projectName, ?array $schema, ?bool $enabled = null, ?string $frontendUrl = null, ?bool $frontendPublic = null, ?bool $recruiting = null, ?array $pageRendering = null): ?array
     {
         if (!isset($this->rows[$appKey]) || $this->rows[$appKey]['is_deleted']) return null;
         if ($projectName !== null) $this->rows[$appKey]['project_name'] = $projectName;
         if ($schema !== null) $this->rows[$appKey]['schema'] = $schema;
         if ($frontendUrl !== null) $this->rows[$appKey]['frontend_url'] = $frontendUrl === '' ? null : $frontendUrl;
         if ($frontendPublic !== null) $this->rows[$appKey]['frontend_public'] = $frontendPublic;
+        if ($recruiting !== null) $this->rows[$appKey]['recruiting'] = $recruiting;
+        if ($pageRendering !== null) $this->rows[$appKey]['page_rendering'] = $pageRendering;
         if ($enabled !== null) $this->rows[$appKey]['enabled'] = $enabled;
         return $this->rows[$appKey];
     }
@@ -88,6 +90,19 @@ projectAssert($checkboxSchema['fields']['flags']['options'] === ['one', 'two'], 
 projectAssert(!isset($checkboxSchema['fields']['confirmed']['options']), 'Boolean-style checkbox fields may omit options.');
 projectThrows(fn() => $service->update('town-map', ['schema' => ['fields' => ['id' => ['type' => 'text']]]]), ActivityValidationException::class, 'System columns must not be redefined.');
 projectThrows(fn() => $service->update('town-map', ['schema' => ['fields' => ['x' => ['type' => 'unknown']]]]), ActivityValidationException::class, 'Unsupported types must be rejected.');
+projectThrows(fn() => $service->sanitizeSchema(['fields' => ['photo' => ['type' => 'wikimedia']]]), ActivityValidationException::class, 'Removed Wikimedia type must not be accepted in new definitions.');
+$legacyPhoto = ['label' => '写真', 'type' => 'wikimedia', 'required' => false, 'admin' => ['width' => 180]];
+$repo->rows['legacy-images'] = array_replace($repo->rows['town-map'], ['app_key' => 'legacy-images', 'schema' => ['fields' => ['photo' => $legacyPhoto]]]);
+$expectedPhoto = array_replace($legacyPhoto, ['type' => 'image']);
+projectAssert($service->find('legacy-images')['schema']['fields']['photo'] === $expectedPhoto, 'Stored removed types must be exposed as image without changing other settings.');
+$legacyProjects = array_column($service->list(), null, 'app_key');
+projectAssert($legacyProjects['legacy-images']['schema']['fields']['photo'] === $expectedPhoto, 'Project lists must also normalize removed types.');
+projectAssert($schema->get('legacy-images')['fields']['photo'] === $expectedPhoto, 'Activity schema reads must normalize stored removed types.');
+$legacyStatic = new ActivitySchema(['legacy-static' => ['schema' => ['fields' => ['photo' => $legacyPhoto]]]]);
+projectAssert($legacyStatic->get('legacy-static')['fields']['photo'] === $expectedPhoto, 'Static legacy schemas must also expose image.');
+$resavedImages = $service->update('legacy-images', ['schema' => $service->find('legacy-images')['schema']]);
+projectAssert($resavedImages['schema']['fields']['photo']['type'] === 'image' && $repo->rows['legacy-images']['schema']['fields']['photo']['type'] === 'image', 'Saving a loaded legacy schema must persist the supported image type.');
+unset($repo->rows['legacy-images']);
 $service->update('town-map', ['enabled' => false]);
 projectAssert(in_array('town-map', $schema->appKeys(), true), 'Legacy disable requests must not hide projects.');
 projectAssert($schema->get('town-map') !== [], 'Project schema must remain available.');
@@ -114,3 +129,29 @@ echo "ProjectService behavior: ok\n";
 foreach (['latitude', 'longitude'] as $field) {
     projectThrows(fn() => $service->sanitizeSchema(['fields' => [$field => ['type' => 'number']]]), ActivityValidationException::class, 'Coordinates are reserved metadata.');
 }
+
+$service->create(['app_key' => 'recruitment-test', 'project_name' => 'Recruitment']);
+projectAssert($created['recruiting'] === false, 'Recruitment defaults to closed.');
+projectAssert($service->update('recruitment-test', ['recruiting' => true])['recruiting'], 'Recruitment can be opened.');
+projectAssert($service->update('recruitment-test', ['project_name' => 'Renamed'])['recruiting'], 'Unrelated updates preserve recruitment.');
+projectAssert(!$service->update('recruitment-test', ['recruiting' => false])['recruiting'], 'Recruitment can be closed.');
+projectThrows(fn() => $service->update('recruitment-test', ['recruiting' => 'true']), ActivityValidationException::class, 'Recruitment requires a boolean.');
+
+// Column transfer validates a draft without changing project settings.
+$transferSchema = ['fields'=>[
+    'category'=>['type'=>'select','label'=>'分類','order'=>3,'required'=>true,'maxLength'=>123,'options'=>[['value'=>'a|b','label'=>"公園\n遊具"],['value'=>'zero','label'=>'0']],'admin'=>['visible'=>false,'editable'=>false,'width'=>320]],
+    'taken_at'=>['type'=>'datetime','order'=>0],
+    'photo'=>['type'=>'image','order'=>1],
+    'accessible'=>['type'=>'boolean','order'=>2],
+]];
+$target=$service->create(['app_key'=>'transfer-target','project_name'=>'Production','frontend_url'=>'https://example.test/production','frontend_public'=>false,'recruiting'=>false],123);
+$before=$repo->rows;
+$validated=$service->sanitizeSchema($transferSchema);
+projectAssert($before===$repo->rows,'Draft schema validation must not write records.');
+$imported=$service->update('transfer-target',['schema'=>$validated]);
+projectAssert($imported['schema']===$validated,'Definitions round-trip through target save unchanged.');
+projectAssert($imported['project_name']==='Production' && $imported['frontend_url']==='https://example.test/production' && !$imported['frontend_public'] && !$imported['recruiting'],'Import cannot overwrite environment-specific settings.');
+projectAssert(array_keys($validated['fields'])===['taken_at','photo','accessible','category'],'All types and explicit order survive transfer.');
+projectAssert($validated['fields']['category']['options'][0]===['value'=>'a|b','label'=>"公園\n遊具"] && $validated['fields']['category']['admin']===['visible'=>false,'editable'=>false,'width'=>320] && $validated['fields']['category']['maxLength']===123,'Options, lengths, visibility, editing and width survive transfer.');
+projectThrows(fn()=> $service->sanitizeSchema(['fields'=>['id'=>['type'=>'text']]]),ActivityValidationException::class,'Reserved fields cannot be imported.');
+echo "Column schema transfer validation and target settings preservation: ok\n";

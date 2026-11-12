@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <script src="site-messages.js?v=20261027-project-settings"></script>
+  <script src="site-language.js?v=20261024-language"></script>
+  <link rel="icon" href="favicon.ico?v=20261024" sizes="16x16 32x32 48x48">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20261024">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="referrer" content="no-referrer">
+  <link rel="stylesheet" href="theme.css?v=20261024">
+  <title data-site-i18n="アカウント削除 | Community Map Maker">アカウント削除 | Community Map Maker</title>
+  <link rel="stylesheet" href="account.css?v=20261024-shared-footer">
+  <link rel="stylesheet" href="site-footer.css?v=20261024">
+  <link rel="stylesheet" href="site-header.css?v=20261024-language">
+  <script src="site-session.js?v=20261024-username-link" defer></script>
+</head>
+<body class="site-page site-page--standalone">
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="コミュニティマップメーカー ホーム" data-site-i18n-aria-label="コミュニティマップメーカー ホーム"><img class="brand-symbol" src="cMapmaker.png" alt="" width="500" height="500"><span><span data-site-i18n="コミュニティマップメーカー">コミュニティマップメーカー</span></span></a>
+    <nav class="header-links" aria-label="サイトメニュー" data-site-i18n-aria-label="サイトメニュー">
+      <a id="headerProjectListLink" class="project-list-link" href="./#projects" data-project-list-link><span data-site-i18n="プロジェクト一覧">プロジェクト一覧</span></a>
+      <a id="headerRegistrationLink" href="register.html"><span data-site-i18n="ユーザー登録">ユーザー登録</span></a>
+      <a id="headerLoginLink" class="login-link" href="admin/"><span data-site-i18n="ログイン">ログイン</span> <span aria-hidden="true">↗</span></a>
+      <div id="headerSession" class="session-actions" hidden>
+        <a id="currentAdmin" class="session-user" href="mypage.html"></a>
+        <button id="logoutButton" class="session-logout" type="button"><span data-site-i18n="ログアウト">ログアウト</span></button>
+      </div>
+    </nav>
+  </header>
+<main>
+  <h1><span data-site-i18n="アカウント削除">アカウント削除</span></h1>
+  <p><span data-site-i18n="Community Map Maker 共通アカウントを、本人確認後に削除します。参加しているすべてのプロジェクトで、このアカウントによる投稿・編集ができなくなります。">Community Map Maker 共通アカウントを、本人確認後に削除します。参加しているすべてのプロジェクトで、このアカウントによる投稿・編集ができなくなります。</span></p>
+  <p><strong><span data-site-i18n="公開済みの投稿データはオープンデータとして残ります。">公開済みの投稿データはオープンデータとして残ります。</span></strong><span data-site-i18n="アカウント削除によって投稿の公開を撤回したり、第三者が取得したコピーを回収したりすることはできません。">アカウント削除によって投稿の公開を撤回したり、第三者が取得したコピーを回収したりすることはできません。</span></p>
+  <p><span data-site-i18n="メールアドレス・認証情報・参加権限を削除し、投稿とのアカウントの紐付けを解除します。削除は取り消せません。">メールアドレス・認証情報・参加権限を削除し、投稿とのアカウントの紐付けを解除します。削除は取り消せません。</span></p>
+  <form id="deleteForm">
+    <label for="identity"><span data-site-i18n="ユーザーIDまたはメールアドレス">ユーザーIDまたはメールアドレス</span></label>
+    <input id="identity" name="identity" autocomplete="username" maxlength="255" required>
+    <label for="password"><span data-site-i18n="現在のパスワード">現在のパスワード</span></label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <label for="confirmUserid"><span data-site-i18n="削除するユーザーID（確認用）">削除するユーザーID（確認用）</span></label>
+    <input id="confirmUserid" name="confirm_userid" autocomplete="off" maxlength="64" required>
+    <label class="check"><input id="acknowledge" type="checkbox" required><span><span data-site-i18n="すべての参加権限を失い、公開済みの投稿データは残ることを確認しました。">すべての参加権限を失い、公開済みの投稿データは残ることを確認しました。</span></span></label>
+    <button type="submit"><span data-site-i18n="本人確認してアカウントを削除する">本人確認してアカウントを削除する</span></button>
+  </form>
+  <p id="status" role="status" aria-live="polite"></p>
+  <p><a href="reset-password.html"><span data-site-i18n="パスワードを再設定する">パスワードを再設定する</span></a></p>
+  <p><span data-site-i18n="操作できない場合や、投稿に個人情報が含まれる場合は">操作できない場合や、投稿に個人情報が含まれる場合は</span> <a href="mailto:info@openacrossbase.net">info@openacrossbase.net</a> <span data-site-i18n="へご連絡ください。最後の有効な管理者は、別の有効な管理者を追加してから削除してください。">へご連絡ください。最後の有効な管理者は、別の有効な管理者を追加してから削除してください。</span></p>
+</main>
+  <footer class="site-footer">
+    <div class="site-footer-inner">
+      <div class="site-footer-info">
+        <span class="site-footer-brand"><span data-site-i18n="コミュニティマップメーカー">コミュニティマップメーカー</span></span>
+        <p><span data-site-i18n="運営：Open Across Base">運営：Open Across Base</span><br><span data-site-i18n="問い合わせ：">問い合わせ：</span><a href="mailto:info@openacrossbase.net">info@openacrossbase.net</a></p>
+      </div>
+      <nav class="site-footer-links" aria-label="フッターメニュー" data-site-i18n-aria-label="フッターメニュー">
+        <a href="./"><span data-site-i18n="ホーム">ホーム</span></a>
+        <a href="./#projects"><span data-site-i18n="プロジェクト一覧">プロジェクト一覧</span></a>
+        <a href="register.html"><span data-site-i18n="ユーザー登録">ユーザー登録</span></a>
+        <a href="privacy.html"><span data-site-i18n="プライバシーポリシー">プライバシーポリシー</span></a>
+      </nav>
+    </div>
+  </footer>
+<script>
+'use strict';
+const form = document.getElementById('deleteForm');
+const statusText = document.getElementById('status');
+let submitting = false;
+form.addEventListener('submit', async event => {
+  event.preventDefault();
+  if (submitting || !form.reportValidity()) return;
+  submitting = true;
+  const button = form.querySelector('button');
+  button.disabled = true;
+  statusText.className = '';
+  statusText.textContent = SiteLanguage.t('本人確認して削除しています…');
+  const fields = Object.fromEntries(new FormData(form));
+  try {
+    const response = await fetch('auth/delete-account.php', {
+      method: 'POST', credentials: 'omit', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Account-Action': 'delete' },
+      body: JSON.stringify(fields)
+    });
+    const result = await response.json();
+    if (!response.ok || result.account_deleted !== true) throw new Error(result.code || 'server_error');
+    form.reset();
+    form.hidden = true;
+    statusText.textContent = SiteLanguage.t('アカウントを削除しました。公開済みの投稿データは引き続き公開されます。');
+  } catch (error) {
+    const messages = {
+      invalid_credentials: SiteLanguage.t('ユーザーID・メールアドレスまたはパスワードを確認してください。'),
+      validation_failed: SiteLanguage.t('確認用ユーザーIDに、登録したユーザーIDを正確に入力してください。'),
+      rate_limit_exceeded: SiteLanguage.t('操作が多すぎます。時間をおいて再度お試しください。'),
+      last_administrator: SiteLanguage.t('最後の有効な管理者は削除できません。別の有効な管理者を追加してください。')
+    };
+    statusText.textContent = messages[error.message] || SiteLanguage.t('削除結果を確認できませんでした。時間をおいてお試しいただくか、問い合わせ先へご連絡ください。');
+    statusText.className = 'error';
+  } finally {
+    fields.password = '';
+    form.elements.password.value = '';
+    submitting = false;
+    button.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

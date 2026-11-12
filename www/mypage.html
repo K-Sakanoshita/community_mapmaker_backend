@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <script src="site-messages.js?v=20261027-project-settings"></script>
+  <script src="site-language.js?v=20261024-language"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title data-site-i18n="マイページ | コミュニティマップメーカー">マイページ | コミュニティマップメーカー</title>
+  <link rel="icon" href="favicon.ico?v=20261024" sizes="16x16 32x32 48x48">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20261024">
+  <link rel="stylesheet" href="theme.css?v=20261024">
+  <link rel="stylesheet" href="site-header.css?v=20261024-language">
+  <link rel="stylesheet" href="site-footer.css?v=20261024">
+  <link rel="stylesheet" href="mypage.css?v=20261024">
+  <script src="site-session.js?v=20261024-username-link" defer></script>
+  <script src="mypage.js?v=20261110-dashboard" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="コミュニティマップメーカー ホーム" data-site-i18n-aria-label="コミュニティマップメーカー ホーム"><img class="brand-symbol" src="cMapmaker.png" alt="" width="500" height="500"><span><span data-site-i18n="コミュニティマップメーカー">コミュニティマップメーカー</span></span></a>
+    <nav class="header-links" aria-label="サイトメニュー" data-site-i18n-aria-label="サイトメニュー">
+      <a id="headerProjectListLink" class="project-list-link" href="./#projects" data-project-list-link><span data-site-i18n="プロジェクト一覧">プロジェクト一覧</span></a>
+      <a id="headerRegistrationLink" href="register.html"><span data-site-i18n="ユーザー登録">ユーザー登録</span></a>
+      <a id="headerLoginLink" class="login-link" href="admin/?view=mypage"><span data-site-i18n="ログイン">ログイン</span> <span aria-hidden="true">↗</span></a>
+      <div id="headerSession" class="session-actions" hidden>
+        <a id="currentAdmin" class="session-user" href="mypage.html"></a>
+        <button id="logoutButton" class="session-logout" type="button"><span data-site-i18n="ログアウト">ログアウト</span></button>
+      </div>
+    </nav>
+  </header>
+  <main>
+    <nav class="site-breadcrumbs" aria-label="現在の位置" data-site-i18n-aria-label="現在の位置"><ol><li><a href="./"><span data-site-i18n="ポータル">ポータル</span></a></li><li><span aria-current="page"><span data-site-i18n="マイページ">マイページ</span></span></li></ol></nav>
+    <h1><span data-site-i18n="マイページ">マイページ</span></h1>
+    <section aria-labelledby="myProjectsTitle">
+      <h2 id="myProjectsTitle"><span data-site-i18n="参加プロジェクト">参加プロジェクト</span></h2>
+      <p class="description"><span data-site-i18n="参加しているプロジェクトを確認し、参加を解除できます。参加解除後も、投稿済みのデータは残ります。">参加しているプロジェクトを確認し、参加を解除できます。参加解除後も、投稿済みのデータは残ります。</span></p>
+      <p id="myPageStatus" role="status" aria-live="polite"><span data-site-i18n="参加プロジェクトを読み込んでいます…">参加プロジェクトを読み込んでいます…</span></p>
+      <p id="myPageLogin" hidden><a class="button" href="admin/?view=mypage"><span data-site-i18n="ログインする">ログインする</span></a></p>
+      <p id="myProjectsEmpty" hidden><span data-site-i18n="参加しているプロジェクトはありません。">参加しているプロジェクトはありません。</span><a href="./#projects"><span data-site-i18n="プロジェクト一覧を見る">プロジェクト一覧を見る</span></a></p>
+      <ul id="myProjects" class="my-projects" aria-label="参加プロジェクト一覧" data-site-i18n-aria-label="参加プロジェクト一覧"></ul>
+      <nav id="myProjectsPagination" class="pagination" aria-label="参加プロジェクトのページ" hidden data-site-i18n-aria-label="参加プロジェクトのページ">
+        <button id="myProjectsPrevious" type="button"><span data-site-i18n="前へ">前へ</span></button><span id="myProjectsPage"></span><button id="myProjectsNext" type="button"><span data-site-i18n="次へ">次へ</span></button>
+      </nav>
+      <button id="myProjectsRetry" type="button" hidden><span data-site-i18n="再読み込み">再読み込み</span></button>
+    </section>
+  </main>
+  <footer class="site-footer">
+    <div class="site-footer-inner">
+      <div class="site-footer-info">
+        <span class="site-footer-brand"><span data-site-i18n="コミュニティマップメーカー">コミュニティマップメーカー</span></span>
+        <p><span data-site-i18n="運営：Open Across Base">運営：Open Across Base</span><br><span data-site-i18n="問い合わせ：">問い合わせ：</span><a href="mailto:info@openacrossbase.net">info@openacrossbase.net</a></p>
+      </div>
+      <nav class="site-footer-links" aria-label="フッターメニュー" data-site-i18n-aria-label="フッターメニュー">
+        <a href="./"><span data-site-i18n="ホーム">ホーム</span></a>
+        <a href="./#projects" data-project-list-link><span data-site-i18n="プロジェクト一覧">プロジェクト一覧</span></a>
+        <a href="register.html"><span data-site-i18n="ユーザー登録">ユーザー登録</span></a>
+        <a href="privacy.html"><span data-site-i18n="プライバシーポリシー">プライバシーポリシー</span></a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

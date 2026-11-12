@@ -26,7 +26,7 @@ final class ConsoleSession
         }
         self::start();
         if (!session_regenerate_id(true)) throw new \RuntimeException('Console session rotation failed.');
-        $_SESSION = ['user_id' => (int)$user['id'], 'password_stamp' => hash('sha256', $user['password_hash'])];
+        $_SESSION = ['user_id' => (int)$user['id'], 'password_stamp' => self::accountStamp($user)];
         session_write_close();
     }
 
@@ -47,9 +47,16 @@ final class ConsoleSession
         $stamp = (string)($_SESSION['password_stamp'] ?? '');
         session_write_close();
         $user = $container['user_repo']->findById($id);
-        if (!$user || $user['status'] !== 'active' || !hash_equals($stamp, hash('sha256', $user['password_hash']))) return null;
+        if (!$user || $user['status'] !== 'active' || !hash_equals($stamp, self::accountStamp($user))) return null;
         if (!in_array($user['role'] ?? 'user', ['user', 'admin'], true)) return null;
         return $user;
+    }
+
+    // Account edits revoke sessions as well as password changes. A restored
+    // account must sign in again rather than reviving a pre-deletion cookie.
+    private static function accountStamp(array $user): string
+    {
+        return hash('sha256', $user['password_hash'] . "\0" . ($user['updated_at'] ?? ''));
     }
 
     public static function destroy(): void
