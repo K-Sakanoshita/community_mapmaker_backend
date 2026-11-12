@@ -12,6 +12,40 @@ final class ThumbnailSource
 {
     public const MAX_BYTES = 8388608;
 
+    /** Resolve stored image paths against the project's frontend page URL. */
+    public static function resolveUrl(string $url, ?string $frontendUrl): string
+    {
+        if (preg_match('~^[a-z][a-z0-9+.-]*:~i', $url)) return self::normalizeUrl($url);
+        if ($url === '' || strlen($url) > 4096 || preg_match('/[\x00-\x1f\x7f\\\\]/', $url)) {
+            throw new ThumbnailSourceException('Invalid image URL.');
+        }
+        if ($frontendUrl === null || $frontendUrl === '') {
+            throw new ThumbnailSourceException('Relative image URLs require a project frontend URL.');
+        }
+        // A fragment belongs to the frontend page, never to the image request.
+        $base = self::normalizeUrl(explode('#', $frontendUrl, 2)[0]);
+        require_once __DIR__ . '/PortalPreview.php';
+        $resolved = str_starts_with($url, '?')
+            ? explode('?', $base, 2)[0] . $url
+            : PortalPreview::resolveUrl($base, $url);
+        if ($resolved === null) throw new ThumbnailSourceException('Invalid image URL.');
+        $resolved = self::normalizeUrl($resolved);
+        // Remove literal dot segments so equivalent relative paths share a cache key.
+        $parts = parse_url($resolved);
+        $segments = explode('/', $parts['path'] ?? '/');
+        $path = [];
+        foreach ($segments as $index => $segment) {
+            if ($segment === '..') {
+                if (count($path) > 1) array_pop($path);
+            } elseif ($segment !== '.') {
+                $path[] = $segment;
+            }
+            if (($segment === '.' || $segment === '..') && $index === count($segments) - 1) $path[] = '';
+        }
+        $origin = $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
+        return self::normalizeUrl($origin . implode('/', $path) . (isset($parts['query']) ? '?' . $parts['query'] : ''));
+    }
+
     /** Encode raw UTF-8 bytes without changing URL delimiters or existing escapes. */
     public static function normalizeUrl(string $url): string
     {

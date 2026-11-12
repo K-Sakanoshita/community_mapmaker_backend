@@ -112,6 +112,14 @@ Activityの応答には、最終編集者のログイン用ユーザーIDを`upd
 
 [API一覧](docs/api-reference.md#エンドポイント一覧)から、Activity、Project、ユーザー管理、認証の各仕様へ移動できます。
 
+### 画像サムネイル
+
+`GET api/thumbnail.php?app=APP&id=ACTIVITY_ID&field=image`は、登録済み画像を長辺400px以内に縮小して返します。登録前の画像には、Projectへの書き込み権限を持つユーザーが認証付き`POST api/thumbnail.php`を利用できます。GD・cURLが必要です。
+
+画像URLは絶対URLに加えて相対パスにも対応します。Project設定のサイトURL（`frontend_url`）が`https://example.org/map/`の場合、`images/photo.jpg`は`https://example.org/map/images/photo.jpg`、`/images/photo.jpg`は`https://example.org/images/photo.jpg`として取得します。`./`・`../`も利用できます。ディレクトリを示すサイトURLには末尾の`/`を付けてください。サイトURLが未設定の場合、相対パスは422エラーになります。Activityに保存された画像パスは変更しません。
+
+解決後のURLにも公開HTTP/HTTPS接続先の制限を適用します。フロントエンド側が相対URLをサムネイルAPIへ送らない実装の場合は、そちらの対応も必要です。画像形式・容量制限・キャッシュ・認証条件は[画像サムネイルAPI](docs/api-reference.md#画像サムネイルapi)を参照してください。
+
 ## ユーザー登録と参加プロジェクト
 
 ユーザー登録画面は`register.html`です。URLの`app_key`引数で、参加プロジェクトを初期選択できます。

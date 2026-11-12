@@ -18,6 +18,29 @@ $reject = static function (callable $callback, string $message) use ($check): vo
     $check(false, $message);
 };
 $public = static fn(string $host): array => ['93.184.215.14'];
+$base = 'https://example.org/map/index.html?lang=ja#map';
+foreach ([
+    'images/photo.jpg' => 'https://example.org/map/images/photo.jpg',
+    './images/photo.jpg' => 'https://example.org/map/images/photo.jpg',
+    '../images/photo.jpg' => 'https://example.org/images/photo.jpg',
+    '../../../images/photo.jpg' => 'https://example.org/images/photo.jpg',
+    '/images/photo.jpg?v=1' => 'https://example.org/images/photo.jpg?v=1',
+    '//cdn.example.org/photo.jpg' => 'https://cdn.example.org/photo.jpg',
+    '?image=1' => 'https://example.org/map/index.html?image=1',
+    'images/公園 写真.jpg' => 'https://example.org/map/images/%E5%85%AC%E5%9C%92%20%E5%86%99%E7%9C%9F.jpg',
+] as $relative => $absolute) {
+    $check(ThumbnailSource::resolveUrl($relative, $base) === $absolute, 'Resolve relative image: ' . $relative);
+}
+$check(ThumbnailSource::resolveUrl('photo.jpg', 'https://example.org/map/') === 'https://example.org/map/photo.jpg', 'Directory frontend URL');
+$check(ThumbnailSource::resolveUrl('https://cdn.example.org/photo.jpg', null) === 'https://cdn.example.org/photo.jpg', 'Absolute image needs no frontend URL');
+foreach (['', 'file:///etc/passwd', 'File:Park.jpg', 'data:image/png;base64,abc', 'photo.jpg#fragment', '//user:pass@example.org/a', "images/\\evil.jpg", "images/\nphoto.jpg"] as $invalid) {
+    $reject(static fn() => ThumbnailSource::resolveUrl($invalid, $base), 'Reject unsafe relative reference: ' . $invalid);
+}
+$reject(static fn() => ThumbnailSource::resolveUrl('photo.jpg', null), 'Relative image requires frontend URL');
+$reject(static fn() => ThumbnailSource::resolveUrl('photo.jpg', 'file:///tmp/index.html'), 'Reject invalid frontend URL');
+$reject(static fn() => ThumbnailSource::target(ThumbnailSource::resolveUrl('//127.0.0.1/a', $base)), 'Resolved relative host still blocks loopback');
+$reject(static fn() => ThumbnailSource::target(ThumbnailSource::resolveUrl('a.jpg', 'http://127.0.0.1/map/')), 'Private frontend cannot bypass source protection');
+
 $japaneseUrl = 'https://example.org/画像/公園.jpg?名前=写真&token=a%2Fb+1';
 $encodedUrl = 'https://example.org/%E7%94%BB%E5%83%8F/%E5%85%AC%E5%9C%92.jpg?%E5%90%8D%E5%89%8D=%E5%86%99%E7%9C%9F&token=a%2Fb+1';
 $check(ThumbnailSource::normalizeUrl($japaneseUrl) === $encodedUrl, 'Encode Japanese path and query while preserving delimiters and escapes');

@@ -64,6 +64,23 @@ try {
     $check($request('', 'POST', ['app' => $app, 'url' => $url], 'localviewer')[0] === 403, 'Viewer cannot generate arbitrary URL');
     [$status, $body] = $request('', 'POST', ['app' => $app, 'url' => $url], 'localadmin');
     $check($status === 200 && getimagesizefromstring($body)[0] === 400, 'Authenticated POST returns image');
+    $relative = '../' . $app . '.jpg';
+    $update(['image' => $relative]);
+    $check($request($path)[0] === 422, 'GET relative path requires configured frontend URL');
+    $check($request('', 'POST', ['app' => $app, 'url' => $relative], 'localadmin')[0] === 422, 'POST relative path requires configured frontend URL');
+    $pdo->prepare('UPDATE projects SET frontend_url=? WHERE app_key=?')->execute(['https://example.org/map/index.html?lang=ja#map', $app]);
+    foreach ([$relative, '/' . $app . '.jpg', '//example.org/' . $app . '.jpg'] as $imageUrl) {
+        $update(['image' => $imageUrl]);
+        [$status, $imageBody] = $request($path);
+        $check($status === 200 && @getimagesizefromstring($imageBody)[0] === 400, 'GET resolves stored relative path using project frontend URL');
+        [$status, $imageBody] = $request('', 'POST', ['app' => $app, 'url' => $imageUrl], 'localadmin');
+        $check($status === 200 && @getimagesizefromstring($imageBody)[0] === 400, 'POST resolves relative path using project frontend URL');
+    }
+    $update(['image' => ['../' . $app . '.jpg']]);
+    $check($request($path . '&index=0')[0] === 200, 'Resolve relative image in array');
+    $update(['image' => '//127.0.0.1/private']);
+    $check($request($path)[0] === 502, 'Resolved relative path still blocks local-network source');
+
     foreach ([$japaneseUrl, $encodedJapaneseUrl] as $imageUrl) {
         $update(['image' => $imageUrl]);
         [$status, $imageBody] = $request($path);

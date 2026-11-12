@@ -46,9 +46,9 @@ ActivityApi::run(function () use ($container, $method): array {
     }
     try {
         if (!is_string($url)) throw new ThumbnailSourceException('Expected an image URL.');
-        $url = ThumbnailSource::normalizeUrl($url);
+        $url = ThumbnailSource::resolveUrl($url, $container['project_service']->find($app)['frontend_url'] ?? null);
     } catch (ThumbnailSourceException) {
-        throw new ActivityValidationException(['url' => 'Expected an absolute HTTP(S) image URL without credentials or fragment.']);
+        throw new ActivityValidationException(['url' => 'Expected an HTTP(S) image URL without credentials or fragment, or a relative image path with a configured project frontend URL.']);
     }
     try {
         $result = $container['thumbnail']->get($url, static function () use ($container): void {
