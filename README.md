@@ -108,6 +108,16 @@ curl --get 'http://127.0.0.1:18080/api/activities.php' \
   --data-urlencode 'summary=1'
 ```
 
+投稿の作成者は `userid`、カスタム項目は `filter[項目キー]` で絞り込めます。以下は `sakano` が作成し、`category=park` と `status=open` の両方に完全一致する投稿を取得する例です。絞り込みは件数制限より先に適用され、`batch=1` の分割取得や `format=csv` の CSV 出力にも使えます。
+
+```sh
+curl --get 'http://127.0.0.1:18080/api/activities.php' \
+  --data-urlencode 'app=playgrounds' \
+  --data-urlencode 'userid=sakano' \
+  --data-urlencode 'filter%5Bcategory%5D=park' \
+  --data-urlencode 'filter%5Bstatus%5D=open'
+```
+
 Activityの応答には、最終編集者のログイン用ユーザーIDを`updated_by_userid`として返します。通常取得・`summary=1`・CSVに共通で、編集者が未記録またはユーザーが削除済みの場合は`null`（CSVでは空欄）です。詳しくは[応答フィールド](docs/api-reference.md#activityの応答フィールド)を参照してください。
 
 [API一覧](docs/api-reference.md#エンドポイント一覧)から、Activity、Project、ユーザー管理、認証の各仕様へ移動できます。

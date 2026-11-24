@@ -36,10 +36,7 @@ final class ActivityRepository implements ActivityRepositoryInterface
             $sql .= ' AND id < :before_id';
             $params[':before_id'] = $options['before_id'];
         }
-        $sql .= ($options['batch'] ?? false) ? ' ORDER BY id DESC' : ' ORDER BY updated_at DESC, id DESC';
-        $statement = $this->pdo->prepare($this->listSql($sql, $options));
-        $statement->execute($params);
-        return array_map(fn(array $row): array => $this->decode($row), $statement->fetchAll());
+        return $this->listRows($sql, $params, $options);
     }
 
     public function searchRows(string $appKey, ?array $bbox = null, ?array $osmids = null, array $options = []): array
@@ -48,14 +45,11 @@ final class ActivityRepository implements ActivityRepositoryInterface
         if ($bbox !== null && $osmids === null) {
             $select = 'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at, (SELECT userid FROM users WHERE users.id = activities.updated_by_user_id) AS updated_by_userid FROM activities WHERE is_deleted = 0 AND app_key = ';
             $sql = $select . ':app_key_bbox AND longitude BETWEEN :west AND :east AND latitude BETWEEN :south AND :north '
-                . 'UNION ALL ' . $select . ':app_key_unlocated AND longitude IS NULL AND latitude IS NULL '
-                . 'ORDER BY updated_at DESC, id DESC';
-            $statement = $this->pdo->prepare($this->listSql($sql, $options));
-            $statement->execute([
+                . 'UNION ALL ' . $select . ':app_key_unlocated AND longitude IS NULL AND latitude IS NULL';
+            return $this->listRows($sql, [
                 ':app_key_bbox' => $appKey, ':app_key_unlocated' => $appKey,
                 ':west' => $bbox[0], ':south' => $bbox[1], ':east' => $bbox[2], ':north' => $bbox[3],
-            ]);
-            return array_map(fn(array $row): array => $this->decode($row), $statement->fetchAll());
+            ], $options, true);
         }
         $sql = 'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at, (SELECT userid FROM users WHERE users.id = activities.updated_by_user_id) AS updated_by_userid '
             . 'FROM activities WHERE is_deleted = 0 AND app_key = :app_key';
@@ -73,20 +67,36 @@ final class ActivityRepository implements ActivityRepositoryInterface
             }
             $sql .= ' AND osmid IN (' . implode(', ', $placeholders) . ')';
         }
-        $sql .= ' ORDER BY updated_at DESC, id DESC';
-        $statement = $this->pdo->prepare($this->listSql($sql, $options));
-        $statement->execute($params);
-        return array_map(fn(array $row): array => $this->decode($row), $statement->fetchAll());
+        return $this->listRows($sql, $params, $options);
     }
 
-    private function listSql(string $sql, array $options): string
+    private function listRows(string $sql, array $params, array $options, bool $union = false): array
     {
-        if (($options['updated_since'] ?? null) !== null) {
-            $sql = 'SELECT * FROM (' . $sql . ') AS selected_activities WHERE updated_at >= '
-                . $this->pdo->quote($options['updated_since']) . ' ORDER BY updated_at DESC, id DESC';
+        $conditions = [];
+        if (isset($options['updated_since'])) {
+            $conditions[] = 'updated_at >= :updated_since';
+            $params[':updated_since'] = $options['updated_since'];
         }
+        if (isset($options['userid'])) {
+            $conditions[] = 'created_by_user_id = (SELECT id FROM users WHERE userid_normalized = :userid)';
+            $params[':userid'] = $options['userid'];
+        }
+        foreach ($options['filter'] ?? [] as $key => $value) {
+            $index = count($conditions);
+            $conditions[] = "JSON_TYPE(JSON_EXTRACT(data_json, :type_path_$index)) IN ('STRING', 'INTEGER', 'DOUBLE', 'BOOLEAN')"
+                . " AND BINARY JSON_UNQUOTE(JSON_EXTRACT(data_json, :value_path_$index)) = BINARY :value_$index";
+            $params[":type_path_$index"] = $params[":value_path_$index"] = '$."' . $key . '"';
+            $params[":value_$index"] = $value;
+        }
+        if ($conditions !== []) {
+            $sql = $union ? 'SELECT * FROM (' . $sql . ') AS selected_activities WHERE ' : $sql . ' AND ';
+            $sql .= implode(' AND ', $conditions);
+        }
+        $sql .= ($options['batch'] ?? false) ? ' ORDER BY id DESC' : ' ORDER BY updated_at DESC, id DESC';
         if (($options['limit'] ?? null) !== null) $sql .= ' LIMIT ' . (int)$options['limit'];
-        return $sql;
+        $statement = $this->pdo->prepare($sql);
+        $statement->execute($params);
+        return array_map(fn(array $row): array => $this->decode($row), $statement->fetchAll());
     }
 
     public function find(string $appKey, string $activityKey): ?array

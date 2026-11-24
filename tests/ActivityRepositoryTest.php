@@ -176,6 +176,19 @@ $check($service->list('test', 'node/950', ['summary' => '1'])[0]['updated_by_use
 $check($service->listSelected('test', ['osmids' => 'node/950'])[0]['updated_by_userid'] === 'editor-next', 'Candidate selection must include editor');
 $bboxEditors = array_column($service->listSelected('test', ['bbox' => '135,35,135.5,35.5']), 'updated_by_userid', 'id');
 $check($bboxEditors['editor/1'] === 'editor-next', 'BBOX union must include unlocated editor metadata');
+$repo->create('test', 'editor/2', null, 'node/950', ['name' => 'edited item', 'status.code' => true], 900000002);
+$repo->create('test', 'editor/3', null, 'node/950', ['name' => 'edited item', 'status.code' => true], 900000001);
+$repo->create('test', 'editor/4', null, 'node/950', ['name' => 'edited item', 'status.code' => null], 900000001);
+$filters = ['userid' => 'EDITOR-FIRST', 'filter' => ['name' => 'edited item', 'status.code' => 'true']];
+$check(array_column($service->list('test', 'node/950', $filters + ['limit' => '1']), 'id') === ['editor/3'], 'Creator and scalar field filters run before the limit');
+$check(array_column($service->list('test', 'node/950', ['userid' => 'editor-first', 'filter' => ['name' => 'Edited item']]), 'id') === ['editor/1'], 'Creator filter is independent of latest editor and field values are case sensitive');
+$check(array_column($service->listSelected('test', $filters + ['bbox' => '135,35,135.5,35.5']), 'id') === ['editor/3'], 'BBOX union applies creator and field filters');
+$check(array_column($service->listSelected('test', $filters + ['osmids' => 'node/950']), 'id') === ['editor/3'], 'OSM ID selection applies creator and field filters');
+$filteredBatch = $service->listBatch('test', $filters + ['batch' => '1', 'limit' => '1']);
+$check(array_column($filteredBatch['items'], 'id') === ['editor/3'] && $filteredBatch['next_cursor'] === null, 'Batch filters apply before choosing a continuation');
+foreach ([['userid' => []], ['filter' => 'bad'], ['filter' => ['name' => ['nested']]], ['filter' => ['updated_by_userid' => 'editor-next']]] as $invalid) {
+    $throws(fn() => $service->list('test', null, $invalid), CommunityMapMaker\Activity\ActivityValidationException::class);
+}
 $pdo->exec("UPDATE users SET userid='editor-renamed' WHERE id=900000002");
 $check($service->find('test', 'editor/1')['updated_by_userid'] === 'editor-renamed', 'Userid must resolve the current account value');
 $pdo->exec('DELETE FROM users WHERE id=900000002');

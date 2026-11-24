@@ -44,7 +44,8 @@ final class ActivityService
         }
         $options = $this->listOptions($input);
         $limit = $options['limit'] ?? 100;
-        $options = ['batch' => true, 'limit' => $limit + 1];
+        $options['batch'] = true;
+        $options['limit'] = $limit + 1;
         if (array_key_exists('cursor', $input)) {
             $cursor = $input['cursor'];
             if (!is_string($cursor) || !preg_match('/\A[1-9][0-9]*\z/', $cursor)
@@ -74,6 +75,25 @@ final class ActivityService
     private function listOptions(array $input): array
     {
         $options = [];
+        if (array_key_exists('userid', $input)) {
+            $userid = $input['userid'];
+            if (!is_string($userid) || !preg_match('/\A[A-Za-z0-9][A-Za-z0-9_.-]{2,63}\z/', $userid)) {
+                throw new ActivityValidationException(['userid' => 'Expected a valid user ID.']);
+            }
+            $options['userid'] = strtolower($userid);
+        }
+        if (array_key_exists('filter', $input)) {
+            if (!is_array($input['filter']) || count($input['filter']) > 256) {
+                throw new ActivityValidationException(['filter' => 'Expected up to 256 field=value filters.']);
+            }
+            foreach ($input['filter'] as $key => $value) {
+                if (!is_string($key) || isset(self::RESERVED[$key]) || !is_string($value)) {
+                    throw new ActivityValidationException(['filter' => 'Expected a custom field name and a scalar value.']);
+                }
+                $this->schema->assertKey($key, 'field');
+            }
+            $options['filter'] = $input['filter'];
+        }
         if (array_key_exists('limit', $input)) {
             $value = $input['limit'];
             if (!(is_string($value) || is_int($value)) || !preg_match('/\A[1-9][0-9]{0,2}\z/', (string)$value) || (int)$value > 100) {

@@ -95,6 +95,8 @@
 | `osmid` | — | `node/123`, `way/123`, `relation/123` | 単一OSM IDで絞り込み |
 | `osmids` | — | カンマ区切りまたは`osmids[]`配列、最大1,000種類 | 空要素・重複を除く。空指定は空配列 |
 | `bbox` | — | `west,south,east,north` | 保存済み座標で絞り込み。境界を含む |
+| `userid` | — | ログイン用ユーザーID | 投稿を作成したアカウントで絞り込み。大文字・小文字は区別しない |
+| `filter[項目キー]` | — | 文字列 | 投稿のカスタム項目を値で完全一致検索。複数指定するとすべての条件に一致する投稿を返す |
 | `updated_since` | — | タイムゾーン付きRFC3339日時 | 指定日時以降の更新。境界を含む |
 | `limit` | — | 整数1〜100。省略時は制限なし | 最大取得件数。不正値・100超は422 |
 | `summary` | — | `0`（既定）または`1` | `1`で下記の概要フィールドのみ |
@@ -106,9 +108,14 @@
 
 - `osmids`指定時は`bbox`を無視します。`osmid`は`osmids`・`bbox`と併用できません。
 - `updated_since`・`limit`・`summary`は一覧専用です。`id`との併用は422。OSM ID・BBOX絞り込み、CSVとは併用できます。
+- `userid` と `filter` は一覧専用です。`id` との併用は422です。OSM ID・BBOX・更新日時での絞り込みや、CSV・概要・分割取得と併用できます。絞り込みは件数制限より先に適用します。
+- `userid` には初回作成者の現在のユーザーIDを指定します。作成者が記録されていない投稿や、アカウントへの紐付けが解除された投稿は一致しません。
+- `filter` のキーには `data_json` に保存された最上位のカスタム項目を指定できます。文字列・数値・真偽値を文字列として比較し、大文字・小文字や空白を区別します。キーの欠落、`null`、配列、オブジェクトは一致しません。
 - 更新日時の降順、同時刻は内部IDの降順。削除済みActivityは除外します。
 - 引数省略時は従来の全件・全フィールド取得です。最新30件の表示には`limit=30&summary=1`を指定します。分割取得は`batch=1`を指定します。
 - `mode`・`score_min`・`attributes`・`match_mode`・`recent_only`・`photo_only`・`detail_only`・`research_mode`・`page`・`per_page`は一覧で非対応（422）です。
+
+`GET api/activities.php?app=example&userid=sakano&filter%5Bcategory%5D=park&filter%5Bstatus%5D=open` は、`sakano` が作成し、`category=park` と `status=open` の両方を満たす投稿を返します。
 
 **分割取得**
 

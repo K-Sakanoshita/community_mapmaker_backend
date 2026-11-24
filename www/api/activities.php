@@ -30,7 +30,7 @@ if ($method === 'GET') {
         }
         $activityKey = ActivityApi::optionalActivityKey();
         if ($activityKey !== null) {
-            foreach (['updated_since', 'limit', 'summary'] as $parameter) {
+            foreach (['updated_since', 'limit', 'summary', 'userid', 'filter'] as $parameter) {
                 if (array_key_exists($parameter, $_GET)) throw new ActivityValidationException([$parameter => 'Only supported for list requests.']);
             }
             return [200, $container['activity']->find($appKey, $activityKey)];
