@@ -28,16 +28,12 @@ final class AuthService
 
     public function register(array $input, string $clientIdentifier): array
     {
-        if (($this->config['registration_enabled'] ?? false) !== true) {
-            throw new AuthDisabledException('Registration is disabled.');
-        }
+        $this->assertRegistrationEnabled();
 
         [$userid, $useridNormalized] = $this->validateUserid($input['userid'] ?? null);
         [$email, $emailNormalized] = $this->validateEmail($input['email'] ?? null);
         $password = $this->validatePassword($input['password'] ?? null, $input['password_confirmation'] ?? null);
-        $appKey = $input['app_key'] ?? '';
-        if (!is_string($appKey)) throw new ValidationException(['app_key' => 'A project key is required.']);
-        $appKey = trim($appKey);
+        $appKey = $this->registrationAppKey($input);
 
         $this->enforceLimit('register_client', 'client:' . $clientIdentifier);
         $this->enforceLimit('register_email', 'email:' . $emailNormalized);
@@ -50,14 +46,7 @@ final class AuthService
 
         $tokenData = null;
         $user = $this->transactions->run(function () use ($userid, $useridNormalized, $email, $emailNormalized, $passwordHash, $status, $requiresVerification, $appKey, &$tokenData): array {
-            $project = null;
-            if ($appKey !== '') {
-                $project = $this->projects?->find($appKey);
-                if ($project === null || !$project['enabled'] || !($project['frontend_public'] ?? false) || !($project['recruiting'] ?? false)
-                    || ($project['is_deleted'] ?? false) || $this->projectAccess === null) {
-                    throw new ValidationException(['app_key' => 'This project does not accept public registration.']);
-                }
-            }
+            $project = $this->registrationProject($appKey);
             $created = $this->users->create($userid, $useridNormalized, $email, $emailNormalized, $passwordHash, $status, 'user');
             if ($project !== null) {
                 $this->projectAccess->assignProject((int)$created['id'], (int)$project['id'], 'contributor');
@@ -84,6 +73,69 @@ final class AuthService
             'verification_required' => $requiresVerification,
             'verification_email_sent' => $sent,
         ];
+    }
+
+    public function validateOsmRegistration(array $input): array
+    {
+        $this->assertRegistrationEnabled();
+        if (($input['privacy_acknowledged'] ?? null) !== true) {
+            throw new ValidationException(['privacy_acknowledged' => 'Privacy acknowledgement is required.']);
+        }
+        $userid = $input['userid'] ?? null;
+        [$userid] = $this->validateUserid(is_string($userid) ? $userid : '');
+        $appKey = $this->registrationAppKey($input);
+        $this->registrationProject($appKey);
+        return ['userid' => $userid, 'app_key' => $appKey, 'privacy_acknowledged' => true];
+    }
+
+    public function registerOsm(array $input, string $clientIdentifier, string $subject, OsmIdentityRepository $identities): array
+    {
+        $input = $this->validateOsmRegistration($input);
+        [$userid, $useridNormalized] = $this->validateUserid($input['userid']);
+        $appKey = $input['app_key'];
+        $this->enforceLimit('register_client', 'client:' . $clientIdentifier);
+        $this->enforceLimit('register_userid', 'userid:' . $useridNormalized);
+
+        // The random credential is never shown or stored. OSM is the sign-in method.
+        $passwordHash = password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT);
+        $created = $this->transactions->run(function () use ($userid, $useridNormalized, $appKey, $passwordHash, $subject, $identities): array {
+            $project = $this->registrationProject($appKey);
+            $user = $this->users->create($userid, $useridNormalized, null, null, $passwordHash, 'active');
+            if (!$identities->link((int)$user['id'], $subject)) {
+                throw new OsmIdentityAlreadyLinkedException();
+            }
+            if ($project !== null) {
+                $this->projectAccess->assignProject((int)$user['id'], (int)$project['id'], 'contributor');
+            }
+            return $user;
+        });
+        $this->notifyAdminsOfRegistration($created);
+        return $created;
+    }
+
+    private function assertRegistrationEnabled(): void
+    {
+        if (($this->config['registration_enabled'] ?? false) !== true) {
+            throw new AuthDisabledException('Registration is disabled.');
+        }
+    }
+
+    private function registrationAppKey(array $input): string
+    {
+        $appKey = $input['app_key'] ?? '';
+        if (!is_string($appKey)) throw new ValidationException(['app_key' => 'A project key is required.']);
+        return trim($appKey);
+    }
+
+    private function registrationProject(string $appKey): ?array
+    {
+        if ($appKey === '') return null;
+        $project = $this->projects?->find($appKey);
+        if ($project === null || !$project['enabled'] || !($project['frontend_public'] ?? false) || !($project['recruiting'] ?? false)
+            || ($project['is_deleted'] ?? false) || $this->projectAccess === null) {
+            throw new ValidationException(['app_key' => 'This project does not accept public registration.']);
+        }
+        return $project;
     }
 
     private function notifyAdminsOfRegistration(array $user): void

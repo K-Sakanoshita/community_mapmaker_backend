@@ -42,6 +42,13 @@ foreach (['closed', 'private', 'disabled', 'deleted', 'missing', ['playgrounds']
 }
 $projectAuth->register($input, 'test-client');
 assertTrue(count($projectUsers->rows) === 3 && count($memberships->rows) === 2, 'Registration without a project must not assign one.');
+$osmInput = ['userid' => 'osm-user', 'app_key' => 'playgrounds', 'privacy_acknowledged' => true];
+assertTrue($projectAuth->validateOsmRegistration($osmInput) === $osmInput, 'OSM registration must accept an eligible project without email or password.');
+assertThrows(fn() => $projectAuth->validateOsmRegistration(array_replace($osmInput, ['privacy_acknowledged' => false])), CommunityMapMaker\Auth\ValidationException::class, 'OSM registration must require acknowledgement.');
+foreach (['closed', 'private', 'disabled', 'deleted', 'missing'] as $key) {
+    assertThrows(fn() => $projectAuth->validateOsmRegistration(array_replace($osmInput, ['app_key' => $key])), CommunityMapMaker\Auth\ValidationException::class, 'OSM registration must enforce project eligibility.');
+}
+assertTrue(count($projectUsers->rows) === 3 && count($memberships->rows) === 2, 'Starting OSM registration must wait for authentication before creating an account.');
 echo "Registration project behavior: ok\n";
 
 require_once dirname(__DIR__) . '/lib/RegistrationProjects.php';

@@ -42,3 +42,5 @@ final class OsmIdentityRepository
         }
     }
 }
+
+final class OsmIdentityAlreadyLinkedException extends \RuntimeException {}

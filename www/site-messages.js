@@ -252,5 +252,13 @@ window.SiteMessages = {
   "OpenStreetMap アカウントを連携する": "Link an OpenStreetMap account",
   "OpenStreetMap と連携済みです。": "Your OpenStreetMap account is linked.",
   "OpenStreetMap のアカウントを連携した場合は、ログインに使用する OpenStreetMap のユーザー ID を非公開で保存します。": "If you link an OpenStreetMap account, we store its user ID privately for sign-in.",
-  "OpenStreetMap の認証を開始できませんでした。もう一度お試しください。": "Could not start OpenStreetMap authorization. Please try again."
+  "OpenStreetMap の認証を開始できませんでした。もう一度お試しください。": "Could not start OpenStreetMap authorization. Please try again.",
+  "OpenStreetMap で登録": "Register with OpenStreetMap",
+  "OpenStreetMap で登録する場合は、メールアドレスとパスワードの入力は不要です。": "Registration with OpenStreetMap does not require an email address or password here.",
+  "メールアドレスとパスワードで登録する場合": "Register with an email address and password",
+  "{name}の地図づくりに参加するアカウントを作成します。": "Create an account to contribute to {name}.",
+  "地図づくりに参加するためのアカウントを作成します。": "Create an account to contribute to the map.",
+  "登録にはメール確認が必要です。": "Registration requires email verification.",
+  "OpenStreetMap またはメールアドレスで登録できます。": "Register with OpenStreetMap or an email address.",
+  "OpenStreetMap だけで登録したアカウントの削除は、下記の連絡先へお問い合わせください。": "If you registered using only OpenStreetMap, use the contact address below to request account deletion."
 };

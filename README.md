@@ -48,7 +48,9 @@ community_mapmaker_backend/    # /home/ACCOUNT/ 配下の非公開リポジト�
 
 既存 DB に `migrations/014_osm_identities.sql` を適用し、非公開の `config/config.php` の `auth.osm_oauth` に `client_id`、`client_secret`、登録した `redirect_uri` を設定します。PHP の cURL 拡張が必要です。
 
-利用者は既存の ID・パスワードでログインし、マイページで OSM アカウントを連携します。次回から管理画面の「OpenStreetMap でログイン」を使えます。連携には OSM のユーザー ID を保存します。既存のユーザー登録とプロジェクト権限は引き続き Community Map Maker で管理します。
+新規利用者はユーザー登録画面で公開用ユーザー ID と任意の参加先を選び、「OpenStreetMap で登録」を使えます。メールアドレスやパスワードの入力は不要です。OSM の認証後にアカウントを作成し、マイページへ移動します。参加先を選んだ場合は、公開中かつ募集中のプロジェクトに投稿者として参加します。新規登録の可否は従来と同じ `auth.registration_enabled` で管理します。
+
+既存利用者は ID・パスワードでログインし、マイページから OSM アカウントを連携できます。登録・連携後は管理画面の「OpenStreetMap でログイン」を使えます。照合には OSM の固有ユーザー ID を使います。OSM だけで登録したアカウントの削除は、アカウント削除画面の問い合わせ先で受け付けます。
 
 ### Activity設定
 

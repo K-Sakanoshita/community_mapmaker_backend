@@ -3,10 +3,8 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/_runtime.php';
 
-use CommunityMapMaker\Auth\ConsoleSession;
-use CommunityMapMaker\Auth\Http;
-use CommunityMapMaker\Auth\OsmIdentityRepository;
-use CommunityMapMaker\Auth\OsmOAuth;
+use CommunityMapMaker\Auth\{AuthDisabledException, ConsoleSession, DuplicateIdentityException, Http,
+    OsmIdentityAlreadyLinkedException, OsmIdentityRepository, OsmOAuth, RateLimitExceededException, ValidationException};
 
 $container = require CMM_PRIVATE_ROOT . '/bootstrap.php';
 require_once CMM_PRIVATE_ROOT . '/lib/OsmOAuth.php';
@@ -20,6 +18,7 @@ if (($_SERVER['HTTP_X_CONSOLE_SESSION'] ?? '') !== '1') {
 $osm = new OsmOAuth((array)($container['auth_config']['osm_oauth'] ?? []));
 if (!$osm->enabled()) Http::respond(200, ['enabled' => false]);
 $identities = new OsmIdentityRepository($container['database']->pdo());
+$registrationEnabled = ($container['auth_config']['registration_enabled'] ?? false) === true;
 
 try {
     $user = ConsoleSession::user($container);
@@ -28,12 +27,13 @@ try {
             'enabled' => true,
             'signed_in' => $user !== null,
             'linked' => $user !== null && $identities->isLinked((int)$user['id']),
+            'registration_enabled' => $registrationEnabled,
         ]);
     }
 
     $input = Http::jsonInput(8192);
     $action = $input['action'] ?? '';
-    if ($action === 'login' || $action === 'link') {
+    if (in_array($action, ['login', 'link', 'register'], true)) {
         if ($action === 'link') {
             if ($user === null) Http::respond(401, ['code' => 'authentication_required']);
             if ($identities->isLinked((int)$user['id'])) Http::respond(409, ['code' => 'already_linked']);
@@ -45,6 +45,7 @@ try {
         $verifier = bin2hex(random_bytes(32));
         $view = $input['view'] ?? '';
         $app = $input['app'] ?? '';
+        $registration = $action === 'register' ? $container['auth']->validateOsmRegistration($input) : null;
         ConsoleSession::beginOsmAuthorization([
             'state' => $state,
             'verifier' => $verifier,
@@ -52,7 +53,8 @@ try {
             'user_id' => $user === null ? null : (int)$user['id'],
             'lang' => ($input['lang'] ?? '') === 'en' ? 'en' : 'ja',
             'view' => in_array($view, ['mypage', 'detail', 'columns', 'activities', 'create', 'users', 'all-users', 'trash'], true) ? $view : '',
-            'app' => is_string($app) && preg_match('/\A[A-Za-z0-9_-]{1,100}\z/', $app) ? $app : '',
+            'app' => $registration['app_key'] ?? (is_string($app) && preg_match('/\A[A-Za-z0-9_-]{1,100}\z/', $app) ? $app : ''),
+            'registration' => $registration,
         ]);
         Http::respond(200, ['authorization_url' => $osm->authorizationUrl($state, $verifier)]);
     }
@@ -65,6 +67,8 @@ try {
     $result = [
         'lang' => $flow['lang'],
         'link' => $flow['user_id'] !== null,
+        'registration' => isset($flow['registration']),
+        'can_register' => $registrationEnabled,
         'view' => $flow['view'],
         'app' => $flow['app'],
     ];
@@ -85,7 +89,14 @@ try {
         }
     } else {
         $id = $identities->userId($subject);
-        $user = $id === null ? null : $container['user_repo']->findById($id);
+        if ($id === null && isset($flow['registration'])) {
+            $created = $container['auth']->registerOsm(
+                $flow['registration'], Http::clientIdentifier($container['auth_config']), $subject, $identities
+            );
+            $id = (int)$created['id'];
+        }
+        if ($id === null) Http::respond(403, $result + ['code' => 'osm_account_unlinked']);
+        $user = $container['user_repo']->findById($id);
         if ($user === null || $user['status'] !== 'active' || !in_array($user['role'], ['user', 'admin'], true)) {
             Http::respond(403, $result + ['code' => 'osm_account_unavailable']);
         }
@@ -93,6 +104,17 @@ try {
         ConsoleSession::establish($user);
     }
     Http::respond(200, $result + ['status' => 'ok']);
+} catch (AuthDisabledException) {
+    Http::respond(403, ($result ?? []) + ['code' => 'registration_disabled']);
+} catch (DuplicateIdentityException) {
+    Http::respond(409, ($result ?? []) + ['code' => 'identity_already_registered']);
+} catch (OsmIdentityAlreadyLinkedException) {
+    Http::respond(409, ($result ?? []) + ['code' => 'osm_link_conflict']);
+} catch (RateLimitExceededException) {
+    header('Retry-After: 60');
+    Http::respond(429, ($result ?? []) + ['code' => 'rate_limit_exceeded']);
+} catch (ValidationException $error) {
+    Http::respond(422, ($result ?? []) + ['code' => 'validation_failed', 'errors' => $error->errors]);
 } catch (Throwable $error) {
     $requestId = bin2hex(random_bytes(8));
     error_log(sprintf('OSM authentication error [%s]: %s', $requestId, $error::class));

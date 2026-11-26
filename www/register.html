@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <script src="site-messages.js?v=20261027-project-settings"></script>
+  <script src="site-messages.js?v=20261126-osm-registration"></script>
   <script src="site-language.js?v=20261024-language"></script>
   <link rel="icon" href="favicon.ico?v=20261024" sizes="16x16 32x32 48x48">
   <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20261024">
@@ -52,13 +52,18 @@
   <form id="registerForm">
     <label><span data-site-i18n="参加プロジェクト（任意）">参加プロジェクト（任意）</span><select id="registrationProject" name="app_key" aria-describedby="registrationProjectHint" disabled><option value="" data-site-i18n="読み込み中…">読み込み中…</option></select></label>
     <p id="registrationProjectHint" class="hint"><span data-site-i18n="既存のプロジェクトに参加する場合は参加先を選んでください。後で決めたり、メール確認後に自分のプロジェクトを作成したりすることもできます。新規プロジェクトの地図画面との連携は開発中です。">既存のプロジェクトに参加する場合は参加先を選んでください。後で決めたり、メール確認後に自分のプロジェクトを作成したりすることもできます。新規プロジェクトの地図画面との連携は開発中です。</span></p>
-    <label><span data-site-i18n="ユーザーID">ユーザーID</span><input name="userid" autocomplete="username" minlength="3" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,63}" required></label>
+    <label><span data-site-i18n="ユーザーID">ユーザーID</span><input name="userid" autocomplete="username" minlength="3" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_.\-]{2,63}" required></label>
     <p class="hint"><span data-site-i18n="英数字で始まる3〜64文字。英数字、ピリオド、アンダースコア、ハイフンを使えます。">英数字で始まる3〜64文字。英数字、ピリオド、アンダースコア、ハイフンを使えます。</span></p>
+    <label class="check"><input id="privacyAcknowledgement" type="checkbox" required><span><a href="privacy.html" target="_blank" rel="noopener"><span data-site-i18n="プライバシーポリシー">プライバシーポリシー</span></a><span data-site-i18n="と、投稿内容・ユーザーIDが公開され、アカウント削除後も公開済みの投稿データが残ることを確認しました。">と、投稿内容・ユーザーIDが公開され、アカウント削除後も公開済みの投稿データが残ることを確認しました。</span></span></label>
+    <div id="osmRegistration" hidden>
+      <button id="registerWithOsm" type="button" disabled><span data-site-i18n="OpenStreetMap で登録">OpenStreetMap で登録</span></button>
+      <p class="hint"><span data-site-i18n="OpenStreetMap で登録する場合は、メールアドレスとパスワードの入力は不要です。">OpenStreetMap で登録する場合は、メールアドレスとパスワードの入力は不要です。</span></p>
+      <p><strong><span data-site-i18n="メールアドレスとパスワードで登録する場合">メールアドレスとパスワードで登録する場合</span></strong></p>
+    </div>
     <label><span data-site-i18n="メールアドレス">メールアドレス</span><input name="email" type="email" autocomplete="email" maxlength="255" required></label>
     <label><span data-site-i18n="パスワード">パスワード</span><input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
     <p class="hint"><span data-site-i18n="8文字以上で設定してください。">8文字以上で設定してください。</span></p>
     <label><span data-site-i18n="パスワード（確認）">パスワード（確認）</span><input name="password_confirmation" type="password" autocomplete="new-password" minlength="8" required></label>
-    <label class="check"><input id="privacyAcknowledgement" type="checkbox" required><span><a href="privacy.html" target="_blank" rel="noopener"><span data-site-i18n="プライバシーポリシー">プライバシーポリシー</span></a><span data-site-i18n="と、投稿内容・ユーザーIDが公開され、アカウント削除後も公開済みの投稿データが残ることを確認しました。">と、投稿内容・ユーザーIDが公開され、アカウント削除後も公開済みの投稿データが残ることを確認しました。</span></span></label>
     <button type="submit" disabled><span data-site-i18n="登録して確認メールを送る">登録して確認メールを送る</span></button>
   </form>
   <p id="status" role="status" aria-live="polite"></p>
@@ -94,6 +99,10 @@ const resendEmail = document.getElementById('resendEmail');
 const statusText = document.getElementById('status');
 const registrationAppKey = new URLSearchParams(location.search).get('app_key') || '';
 const registrationProject = document.getElementById('registrationProject');
+const passwordRegistration = registerForm.querySelector('button[type="submit"]');
+const privacyAcknowledgement = document.getElementById('privacyAcknowledgement');
+const osmRegistration = document.getElementById('osmRegistration');
+const registerWithOsm = document.getElementById('registerWithOsm');
 let registrationProjects = [];
 let registeredProject = null;
 let registrationCompleted = false;
@@ -106,9 +115,12 @@ function updateProjectPresentation() {
   const name = project?.project_name || '';
   document.getElementById('registrationHeading').textContent = name ? SiteLanguage.t('{name}に参加する', { name }) : SiteLanguage.t('ユーザー登録');
   document.title = (name ? SiteLanguage.t('{name}に参加する', { name }) : SiteLanguage.t('ユーザー登録')) + SiteLanguage.t(' | コミュニティマップメーカー');
-  document.getElementById('registrationPurpose').textContent = name
-    ? SiteLanguage.t('{name}の地図づくりに参加するアカウントを作成します。登録にはメール確認が必要です。', { name })
-    : SiteLanguage.t('地図づくりに参加するためのアカウントを作成します。登録にはメール確認が必要です。');
+  const purpose = name
+    ? SiteLanguage.t('{name}の地図づくりに参加するアカウントを作成します。', { name })
+    : SiteLanguage.t('地図づくりに参加するためのアカウントを作成します。');
+  document.getElementById('registrationPurpose').textContent = purpose + ' ' + (osmRegistration.hidden
+    ? SiteLanguage.t('登録にはメール確認が必要です。')
+    : SiteLanguage.t('OpenStreetMap またはメールアドレスで登録できます。'));
   const wrapper = document.getElementById('projectReturn');
   const link = document.getElementById('projectReturnLink');
   wrapper.hidden = true;
@@ -150,15 +162,16 @@ async function loadRegistrationProjects() {
     }
     projectsReady = true;
     registrationProject.disabled = false;
-    registerForm.querySelector('button').disabled = false;
+    passwordRegistration.disabled = false;
+    registerWithOsm.disabled = false;
     updateProjectPresentation();
   } catch (error) {
     showStatus(SiteLanguage.t('参加プロジェクトを読み込めませんでした。ページを再読み込みしてください。'), true);
   }
 }
 loadRegistrationProjects();
-async function post(path, body) {
-  const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(body) });
+async function post(path, body, extraHeaders = {}) {
+  const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', ...extraHeaders }, body: JSON.stringify(body) });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(data.code || `HTTP ${response.status}`);
@@ -171,6 +184,51 @@ function showStatus(message, error = false) {
   statusText.textContent = message;
   statusText.className = error ? 'error' : 'success';
 }
+const osmHeaders = { 'X-Console-Session': '1' };
+async function loadOsmRegistration() {
+  try {
+    const response = await fetch('api/osm-auth.php', { headers: osmHeaders });
+    const result = await response.json();
+    osmRegistration.hidden = !response.ok || !result.enabled || !result.registration_enabled || result.signed_in;
+    updateProjectPresentation();
+  } catch { /* Email and password registration is available regardless of OSM status. */ }
+}
+loadOsmRegistration();
+
+registerWithOsm.addEventListener('click', async () => {
+  if (!registerForm.elements.userid.reportValidity() || !privacyAcknowledgement.reportValidity()) return;
+  if (!projectsReady || registrationProject.selectedOptions[0]?.disabled) {
+    showStatus(SiteLanguage.t('参加プロジェクトを選択してください。'), true);
+    return;
+  }
+  registerWithOsm.disabled = true;
+  passwordRegistration.disabled = true;
+  showStatus('');
+  try {
+    const result = await post('api/osm-auth.php', {
+      action: 'register',
+      lang: SiteLanguage.lang,
+      userid: registerForm.elements.userid.value,
+      app_key: registrationProject.value,
+      privacy_acknowledged: privacyAcknowledgement.checked,
+    }, osmHeaders);
+    if (!result.authorization_url) throw new Error('osm_unavailable');
+    location.assign(result.authorization_url);
+  } catch (error) {
+    const message = error.errors?.app_key
+      ? 'このプロジェクトからは登録できません。利用するアプリの登録リンクを確認してください。'
+      : 'OpenStreetMap の認証を開始できませんでした。もう一度お試しください。';
+    showStatus(SiteLanguage.t(message), true);
+    registerWithOsm.disabled = false;
+    passwordRegistration.disabled = false;
+  }
+});
+window.addEventListener('pageshow', event => {
+  if (!event.persisted) return;
+  registerWithOsm.disabled = !projectsReady;
+  passwordRegistration.disabled = !projectsReady;
+  loadOsmRegistration();
+});
 registerForm.addEventListener('submit', async event => {
   event.preventDefault();
   if (!registerForm.reportValidity()) return;
@@ -181,8 +239,8 @@ registerForm.addEventListener('submit', async event => {
   const fields = Object.fromEntries(new FormData(registerForm));
   const submittedProject = selectedProject();
   if (fields.password !== fields.password_confirmation) { showStatus(SiteLanguage.t('確認用パスワードが一致しません。'), true); return; }
-  const button = registerForm.querySelector('button');
-  button.disabled = true;
+  passwordRegistration.disabled = true;
+  registerWithOsm.disabled = true;
   showStatus(SiteLanguage.t('登録中…'));
   try {
     const result = await post('auth/register.php', fields);
@@ -224,7 +282,7 @@ registerForm.addEventListener('submit', async event => {
     }
     const messages = { identity_already_registered: SiteLanguage.t('ユーザーIDまたはメールアドレスは既に登録されています。メール確認がまだの場合は、下の欄から確認メールを再送してください。'), rate_limit_exceeded: SiteLanguage.t('操作が多すぎます。しばらく待ってから再度お試しください。'), validation_failed: SiteLanguage.t('入力内容を確認してください。'), registration_disabled: SiteLanguage.t('現在、ユーザー登録を受け付けていません。') };
     showStatus(messages[error.message] || SiteLanguage.t('登録できませんでした。しばらくしてから再度お試しください。'), true);
-  } finally { fields.password = ''; fields.password_confirmation = ''; registerForm.elements.password.value = ''; registerForm.elements.password_confirmation.value = ''; button.disabled = false; }
+  } finally { fields.password = ''; fields.password_confirmation = ''; registerForm.elements.password.value = ''; registerForm.elements.password_confirmation.value = ''; passwordRegistration.disabled = false; registerWithOsm.disabled = false; }
 });
 resendForm.addEventListener('submit', async event => {
   event.preventDefault();
