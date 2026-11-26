@@ -235,7 +235,7 @@ final class ActivityService
         }
     }
 
-    public function batch(string $appKey, array $creates, array $updates, array $deletes, ?int $actorUserId = null): array
+    public function batch(string $appKey, array $creates, array $updates, array $deletes, ?int $actorUserId = null, ?callable $externalAuthorization = null): array
     {
         $this->schema->appConfig($appKey);
         $total = count($creates) + count($updates) + count($deletes);
@@ -266,7 +266,9 @@ final class ActivityService
             }
         }
 
-        return $this->transactions->run(function () use ($appKey, $creates, $updates, $deletes, $actorUserId): array {
+        return $this->transactions->run(function () use ($appKey, $creates, $updates, $deletes, $actorUserId, $externalAuthorization): array {
+            $access = $externalAuthorization === null ? null : $externalAuthorization();
+            $actorUserId = $access?->userId ?? $actorUserId;
             $results = ['created' => [], 'updated' => [], 'deleted' => []];
             foreach ($creates as $item) {
                 $item['app'] = $appKey;
@@ -275,10 +277,12 @@ final class ActivityService
             foreach ($updates as $item) {
                 $item['app'] = $appKey;
                 $key = trim((string)($item['id'] ?? $item['activity_key']));
+                $access?->assertCanChange($key);
                 $results['updated'][] = $this->update($key, $item, false, $actorUserId);
             }
             foreach ($deletes as $key) {
                 $key = trim($key);
+                $access?->assertCanChange($key);
                 $this->delete($appKey, $key);
                 $results['deleted'][] = $key;
             }

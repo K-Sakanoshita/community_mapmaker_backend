@@ -9,6 +9,7 @@ Activityは1投稿をDBの1レコードに保存し、サイト固有項目を`d
 | 目的 | 参照先 |
 | --- | --- |
 | エンドポイント・引数・応答・認証条件を調べる | [APIリファレンス](docs/api-reference.md) |
+| 外部アプリを登録し、OSM ログインと投稿 API をつなぐ | [外部アプリ連携](docs/external-apps.md) |
 | Docker、LAN/VPN、HTTPS、ローカルDBを使う | [ローカル開発環境](docs/local-development.md) |
 | ポータル・管理画面・ユーザー登録を使う | [画面と管理操作](docs/admin-guide.md) |
 | 本番へ配置する | [さくらサーバーへのデプロイ](SAKURA_DEPLOY.md) |
@@ -17,7 +18,7 @@ Activityは1投稿をDBの1レコードに保存し、サイト固有項目を`d
 
 PHP 8.1以上、PDO MySQL、MySQL 8.0以上または互換DB、`mail()`から送信可能なSendmail環境、HTTPSが必要です。
 
-1. 新規DBには`schema.sql`を適用します。既存DBは未適用の`migrations/001_activity_core.sql`から`migrations/017_optional_password.sql`までを番号順に適用します。
+1. 新規DBには`schema.sql`を適用します。既存DBは未適用の`migrations/001_activity_core.sql`から`migrations/018_external_apps.sql`までを番号順に適用します。
 2. `config/config.example.php`をWeb公開ディレクトリ外へコピーし、DB接続・許可Origin・メール送信者・確認URL・パスワード再設定URLを設定します。
 3. `CMM_AUTH_CONFIG`に実設定ファイルの絶対パス、`CMM_RATE_LIMIT_SECRET`に32文字以上のランダムな秘密値を設定します。
 4. 静的Projectは`activity.apps`に登録します。新規Projectは管理画面からDBへ作成できます。

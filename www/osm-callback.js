@@ -53,7 +53,7 @@ async function complete() {
     returnLink.href = result.registration && !response.ok ? registrationPage : target;
     returnLink.textContent = message(result.registration && !response.ok ? 'back_to_registration' : mypage ? 'mypage' : 'back');
     if (response.ok && result.status === 'ok') {
-      location.replace(target);
+      location.replace(result.external ? '../external-authorize.php?resume=1' : target);
       return;
     }
     if (result.code === 'osm_account_unlinked' && result.can_register) {

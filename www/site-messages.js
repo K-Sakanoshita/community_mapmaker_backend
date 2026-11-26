@@ -287,5 +287,6 @@ window.SiteMessages = {
   "ログイン用パスワードを保存しました。": "Your sign-in password was saved.",
   "現在のパスワードが一致しません。": "The current password does not match.",
   "パスワードの長さを確認してください。": "Check the length of your password.",
-  "パスワードを保存できませんでした。": "Could not save your password."
+  "パスワードを保存できませんでした。": "Could not save your password.",
+  "連携アプリ": "Connected apps"
 };

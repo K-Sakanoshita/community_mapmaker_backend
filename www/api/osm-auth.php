@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/_runtime.php';
 
-use CommunityMapMaker\Auth\{AuthDisabledException, ConsoleSession, DuplicateIdentityException, Http,
+use CommunityMapMaker\Auth\{AuthDisabledException, ConsoleSession, DuplicateIdentityException, ExternalAppException, Http,
     OsmIdentityAlreadyLinkedException, OsmIdentityRepository, OsmOAuth, RateLimitExceededException, ValidationException};
 
 $container = require CMM_PRIVATE_ROOT . '/bootstrap.php';
@@ -33,10 +33,17 @@ try {
 
     $input = Http::jsonInput(8192);
     $action = $input['action'] ?? '';
-    if (in_array($action, ['login', 'link', 'register'], true)) {
+    if (in_array($action, ['login', 'link', 'register', 'external'], true)) {
+        $external = null;
         if ($action === 'link') {
             if ($user === null) Http::respond(401, ['code' => 'authentication_required']);
             if ($identities->isLinked((int)$user['id'])) Http::respond(409, ['code' => 'already_linked']);
+        } elseif ($action === 'external') {
+            $external = $container['external_apps']->requestAuthorization($input);
+            if (($user['console_auth_method'] ?? null) === 'osm') {
+                ConsoleSession::rememberExternalAuthorization($external);
+                Http::respond(200, ['consent' => true]);
+            }
         } elseif ($user !== null) {
             Http::respond(409, ['code' => 'already_signed_in']);
         }
@@ -55,6 +62,7 @@ try {
             'view' => in_array($view, ['mypage', 'detail', 'columns', 'activities', 'create', 'users', 'all-users', 'trash'], true) ? $view : '',
             'app' => $registration['app_key'] ?? (is_string($app) && preg_match('/\A[A-Za-z0-9_-]{1,100}\z/', $app) ? $app : ''),
             'registration' => $registration,
+            'external' => $external,
         ]);
         Http::respond(200, ['authorization_url' => $osm->authorizationUrl($state, $verifier)]);
     }
@@ -66,7 +74,8 @@ try {
 
     $result = [
         'lang' => $flow['lang'],
-        'link' => $flow['user_id'] !== null,
+        'link' => $flow['user_id'] !== null && !isset($flow['external']),
+        'external' => isset($flow['external']),
         'registration' => isset($flow['registration']),
         'can_register' => $registrationEnabled,
         'view' => $flow['view'],
@@ -90,6 +99,9 @@ try {
         }
     } else {
         $id = $identities->userId($subject);
+        if (isset($flow['external']) && $flow['user_id'] !== null && $id !== $flow['user_id']) {
+            Http::respond(403, $result + ['code' => 'osm_account_unavailable']);
+        }
         $created = null;
         if ($id === null && isset($flow['registration'])) {
             $created = $container['auth']->registerOsm(
@@ -106,9 +118,11 @@ try {
             $identities->updateDisplayName($id, $subject, $profile['display_name']);
         }
         $container['user_repo']->recordLogin($id);
-        ConsoleSession::establish($user, 'osm');
+        ConsoleSession::establish($user, 'osm', $flow['external'] ?? null);
     }
     Http::respond(200, $result + ['status' => 'ok']);
+} catch (ExternalAppException $error) {
+    Http::respond($error->status, ['code' => $error->getMessage()]);
 } catch (AuthDisabledException) {
     Http::respond(403, ($result ?? []) + ['code' => 'registration_disabled']);
 } catch (DuplicateIdentityException) {

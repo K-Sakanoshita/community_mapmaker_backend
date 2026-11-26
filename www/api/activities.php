@@ -10,6 +10,7 @@ use CommunityMapMaker\Auth\ResponseCompression;
 
 require_once CMM_PRIVATE_ROOT . '/lib/ResponseCompression.php';
 ResponseCompression::start();
+define('CMM_EXTERNAL_APP_CORS', true);
 $container = require CMM_PRIVATE_ROOT . '/bootstrap.php';
 require_once CMM_PRIVATE_ROOT . '/lib/ActivityApi.php';
 
@@ -64,11 +65,23 @@ ActivityApi::run(function () use ($container, $method): array {
     $maxBytes = max(1024, (int)($container['activity_config']['max_payload_bytes'] ?? 262144));
     $input = $method === 'DELETE' ? [] : Http::jsonInput($maxBytes);
     $appKey = ActivityApi::appKey($input);
+    $input['app'] = $appKey;
+    if (Http::bearerRequested()) {
+        return $container['database']->run(function () use ($container, $method, $input, $appKey): array {
+            $operation = match ($method) { 'POST' => 'create', 'PUT' => 'update', 'DELETE' => 'delete' };
+            $access = $container['external_apps']->writeAccess($appKey, ['activities:' . $operation]);
+            if ($method === 'POST') return [201, $container['activity']->create($input, false, $access->userId)];
+            $key = ActivityApi::activityKey($input);
+            $access->assertCanChange($key);
+            if ($method === 'PUT') return [200, $container['activity']->update($key, $input, false, $access->userId)];
+            $container['activity']->delete($appKey, $key);
+            return [200, ['status' => 'ok']];
+        });
+    }
     $user = $method === 'POST'
         ? ActivityApi::requireWriteAccess($container, $appKey)
         : ActivityApi::requireProjectWriteAccess($container, $appKey);
     $actorUserId = $user === null ? null : (int)$user['id'];
-    $input['app'] = $appKey;
 
     if ($method === 'POST') {
         return [201, $container['activity']->create($input, false, $actorUserId)];

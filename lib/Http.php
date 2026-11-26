@@ -8,7 +8,7 @@ use Throwable;
 
 final class Http
 {
-    public static function prepare(array $authConfig): void
+    public static function prepare(array $authConfig, ?callable $externalOriginAllowed = null): void
     {
         header('Content-Type: application/json; charset=UTF-8');
         header('X-Content-Type-Options: nosniff');
@@ -27,7 +27,8 @@ final class Http
                     $origin,
                     (array)($authConfig['allowed_origin_hosts'] ?? [])
                 )
-            );
+            )
+            || ($externalOriginAllowed !== null && $externalOriginAllowed($origin));
 
         if ($origin !== '' && $originAllowed) {
             header('Access-Control-Allow-Origin: ' . $origin);
@@ -204,11 +205,7 @@ final class Http
             return [$user, $password];
         }
 
-        $header = (string)(
-            $_SERVER['HTTP_AUTHORIZATION']
-            ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
-            ?? ''
-        );
+        $header = self::authorizationHeader();
         if (!preg_match('/\ABasic\s+([A-Za-z0-9+\/=]+)\z/i', trim($header), $matches)) {
             return null;
         }
@@ -219,6 +216,21 @@ final class Http
         }
 
         return explode(':', $decoded, 2);
+    }
+
+    private static function authorizationHeader(): string
+    {
+        return trim((string)($_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? ''));
+    }
+
+    public static function bearerRequested(): bool
+    {
+        return preg_match('/\ABearer(?:\s|\z)/i', self::authorizationHeader()) === 1;
+    }
+
+    public static function bearerToken(): ?string
+    {
+        return preg_match('/\ABearer[ \t]+([a-f0-9]{64})\z/i', self::authorizationHeader(), $values) ? $values[1] : null;
     }
 
 
@@ -256,6 +268,8 @@ final class Http
         try {
             [$status, $payload] = $callback();
             self::respond((int)$status, (array)$payload);
+        } catch (ExternalAppException $error) {
+            self::respond($error->status, ['error' => $error->getMessage(), 'code' => $error->getMessage()]);
         } catch (ValidationException $error) {
             self::respond(422, ['status' => 'error', 'code' => 'validation_failed', 'errors' => $error->errors]);
         } catch (DuplicateIdentityException) {

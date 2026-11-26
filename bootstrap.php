@@ -32,6 +32,7 @@ require_once __DIR__ . '/lib/ConsoleSession.php';
 require_once __DIR__ . '/lib/AdminUserService.php';
 require_once __DIR__ . '/lib/ProjectAccessService.php';
 require_once __DIR__ . '/lib/Http.php';
+require_once __DIR__ . '/lib/ExternalApps.php';
 require_once __DIR__ . '/lib/ActivityRepository.php';
 require_once __DIR__ . '/lib/ProjectRepository.php';
 require_once __DIR__ . '/lib/ActivitySchema.php';
@@ -52,8 +53,14 @@ try {
     if (!is_array($config)) throw new RuntimeException('Backend config must return an array.');
 
     $authConfig = (array)($config['auth'] ?? []);
-    Http::prepare($authConfig);
-    $database = new Database((array)($config['db'] ?? []));
+    $database = null;
+    $databaseConfig = (array)($config['db'] ?? []);
+    Http::prepare($authConfig, defined('CMM_EXTERNAL_APP_CORS')
+        ? static function (string $origin) use (&$database, $databaseConfig): bool {
+            $database ??= new Database($databaseConfig);
+            return (new CommunityMapMaker\Auth\ExternalApps($database->pdo()))->allowsOrigin($origin);
+        } : null);
+    $database ??= new Database($databaseConfig);
     $userRepo = new UserRepository($database->pdo());
     $projectRepo = new ProjectRepository($database->pdo());
     $adminUserRepo = new AdminUserRepository($database->pdo());
@@ -92,6 +99,7 @@ try {
         'admin_users' => $adminUsers,
         'project_access' => $projectAccess,
         'database' => $database,
+        'external_apps' => new CommunityMapMaker\Auth\ExternalApps($database->pdo()),
         'audit_logs' => $auditLogs,
         'activity' => $activityService,
         'activity_schema' => $activitySchema,

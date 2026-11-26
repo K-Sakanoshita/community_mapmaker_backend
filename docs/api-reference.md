@@ -378,6 +378,10 @@ Schemaの各フィールドは`label`、`type`、`required`、`order`、管理�
 
 POST は `password` と `password_confirmation` を受け取ります。パスワードで認証したセッションでは `current_password` も必要です。OSM ログイン済みのセッションで設定する例は `{"password":"long-password","password_confirmation":"long-password"}` です。成功時は `{"status":"ok"}` を返し、セッション Cookie を更新します。
 
+### 外部アプリ連携
+
+認可開始、PKCE のコード交換、公開用ユーザー ID の取得、Bearer 投稿の URL と例は[外部アプリ連携](external-apps.md)を参照してください。
+
 ### OpenStreetMap ログイン
 
 `api/osm-auth.php` は両メソッドで `X-Console-Session: 1` が必要です。GET は有効化状況を返し、有効時は現在のセッションの `signed_in` と `linked`、新規登録の可否 `registration_enabled` も返します。

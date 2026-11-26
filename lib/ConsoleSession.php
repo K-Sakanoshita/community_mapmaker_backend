@@ -19,7 +19,7 @@ final class ConsoleSession
         if (!$started) throw new \RuntimeException('Console session storage is unavailable.');
     }
 
-    public static function establish(array $user, string $authMethod = 'password'): void
+    public static function establish(array $user, string $authMethod = 'password', ?array $externalAuthorization = null): void
     {
         if (!in_array($user['role'] ?? 'user', ['user', 'admin'], true)) {
             throw new \RuntimeException('Console access is not permitted.');
@@ -27,7 +27,28 @@ final class ConsoleSession
         self::start();
         if (!session_regenerate_id(true)) throw new \RuntimeException('Console session rotation failed.');
         $_SESSION = ['user_id' => (int)$user['id'], 'password_stamp' => self::accountStamp($user), 'auth_method' => $authMethod];
+        if ($externalAuthorization !== null) $_SESSION['external_authorization'] = $externalAuthorization;
         session_write_close();
+    }
+
+    public static function rememberExternalAuthorization(array $request): void
+    {
+        self::start();
+        $_SESSION['external_authorization'] = $request;
+        session_write_close();
+    }
+
+    public static function externalAuthorization(?string $consumeNonce = null): ?array
+    {
+        if (!isset($_COOKIE['cmm_console'])) return null;
+        self::start();
+        $request = $_SESSION['external_authorization'] ?? null;
+        if ($request !== null && $consumeNonce !== null) {
+            if (hash_equals($request['nonce'], $consumeNonce)) unset($_SESSION['external_authorization']);
+            else $request = null;
+        }
+        session_write_close();
+        return $request;
     }
 
     public static function beginOsmAuthorization(array $flow): void

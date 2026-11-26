@@ -6,6 +6,7 @@ namespace CommunityMapMaker\Activity;
 require_once __DIR__ . '/ConsoleSession.php';
 
 use CommunityMapMaker\Auth\Http;
+use CommunityMapMaker\Auth\ExternalAppException;
 use CommunityMapMaker\Auth\ProjectAccessDeniedException;
 use Throwable;
 
@@ -57,6 +58,8 @@ final class ActivityApi
         try {
             [$status, $payload] = $callback();
             Http::respond((int)$status, (array)$payload);
+        } catch (ExternalAppException $error) {
+            Http::respond($error->status, ['status' => 'error', 'code' => $error->getMessage()]);
         } catch (ActivityValidationException $error) {
             Http::respond(422, ['status' => 'error', 'code' => 'validation_failed', 'errors' => $error->errors]);
         } catch (UnknownAppException) {

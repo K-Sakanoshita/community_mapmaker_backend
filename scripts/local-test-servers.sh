@@ -492,6 +492,8 @@ migrate_stack() {
         compose exec --no-TTY database \
             mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker < "$project_root/migrations/017_optional_password.sql"
     fi
+    compose exec --no-TTY database \
+        mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker < "$project_root/migrations/018_external_apps.sql"
 }
 
 seed_stack() {
