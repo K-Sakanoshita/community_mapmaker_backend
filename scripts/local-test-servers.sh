@@ -469,6 +469,8 @@ migrate_stack() {
         echo 'Project page rendering migration is already applied.'
     fi
 
+    compose exec --no-TTY database \
+        mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker < "$project_root/migrations/014_osm_identities.sql"
 }
 
 seed_stack() {

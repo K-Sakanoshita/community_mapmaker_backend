@@ -3,7 +3,7 @@
 <head>
   <base href="../../admin/">
   <meta charset="utf-8">
-  <script src="../site-messages.js?v=20261027-project-settings"></script>
+  <script src="../site-messages.js?v=20261126-osm"></script>
   <script src="../site-language.js?v=20261024-language"></script>
   <link rel="icon" href="../favicon.ico?v=20261024" sizes="16x16 32x32 48x48">
   <link rel="icon" type="image/svg+xml" href="../favicon.svg?v=20261024">
@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="../site-header.css?v=20261024-language">
   <link rel="stylesheet" href="../site-footer.css?v=20261024">
   <script src="../site-session.js?v=20261024-username-link" defer></script>
+  <script src="../osm-sign-in.js?v=1" defer></script>
 </head>
 <body class="site-page">
   <header class="site-header" data-session-managed="admin">
@@ -43,6 +44,10 @@
         <label>User ID<input class="form-control" id="userid" autocomplete="username" autofocus required></label>
         <label>Password<input class="form-control" id="password" type="password" autocomplete="current-password" required></label>
         <button id="connectButton" class="btn btn-success" type="submit">Sign in</button>
+      </div>
+      <div data-osm-action="login" class="mt-3" hidden>
+        <button class="btn btn-outline-primary w-100" type="button"><span data-site-i18n="OpenStreetMap でログイン">Sign in with OpenStreetMap</span></button>
+        <div role="status" class="small"></div>
       </div>
       <p class="signup-link"><a href="../">Back to portal</a> · <a href="../register.html">Create an account</a></p>
       <p id="loginStatus" class="login-status text-center small" role="status" aria-live="polite">Enter your credentials.</p>

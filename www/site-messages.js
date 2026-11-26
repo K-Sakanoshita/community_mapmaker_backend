@@ -246,5 +246,11 @@ window.SiteMessages = {
   "参加プロジェクトを読み込めませんでした。": "Could not load your projects.",
   "{name}に参加する": "Join {name}",
   "{name}の地図づくりに参加するアカウントを作成します。登録にはメール確認が必要です。": "Create an account to contribute to {name}. Email verification is required.",
-  "{name}へ戻る": "Return to {name}"
+  "{name}へ戻る": "Return to {name}",
+  "OpenStreetMap でログイン": "Sign in with OpenStreetMap",
+  "OpenStreetMap アカウント連携": "OpenStreetMap connection",
+  "OpenStreetMap アカウントを連携する": "Link an OpenStreetMap account",
+  "OpenStreetMap と連携済みです。": "Your OpenStreetMap account is linked.",
+  "OpenStreetMap のアカウントを連携した場合は、ログインに使用する OpenStreetMap のユーザー ID を非公開で保存します。": "If you link an OpenStreetMap account, we store its user ID privately for sign-in.",
+  "OpenStreetMap の認証を開始できませんでした。もう一度お試しください。": "Could not start OpenStreetMap authorization. Please try again."
 };

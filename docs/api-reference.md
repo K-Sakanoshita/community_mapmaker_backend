@@ -22,6 +22,7 @@
 | GET | [`api/project-trash.php`](#削除済みproject) | 削除済み管理画面への転送（JSONではない） | 管理者セッション |
 | GET / POST | [`api/project-trash-data.php`](#削除済みproject) | 削除済み一覧・復元・物理削除 | `admin` |
 | GET / POST / DELETE | [`api/console-session.php`](#管理画面のセッション) | セッション復元・ログイン・ログアウト | 操作別（下表） |
+| GET / POST | [`api/osm-auth.php`](#openstreetmap-ログイン) | OpenStreetMap 連携状態・認証開始・認証完了 | 管理画面と同じオリジン |
 | GET / POST / PUT | [`api/admin-users.php`](#ユーザー管理) | ユーザー管理 | `admin` |
 | GET | [`api/admin-audit-logs.php`](#監査ログ) | 監査ログ一覧 | `admin` |
 | POST | [`auth/register.php`](#登録メール確認パスワード再設定) | ユーザー登録 | 不要 |
@@ -365,6 +366,12 @@ Schemaの各フィールドは`label`、`type`、`required`、`order`、管理�
 | GET `api/console-session.php?summary=1` | 同上 | `user`のみ。共通ヘッダーの状態確認用で、Project取得・投稿件数集計は行いません |
 | POST `api/console-session.php` | 有効な認証＋`X-Console-Session: 1`。通常はHTTP Basicでログイン | 上記応答＋セッションCookieを設定 |
 | DELETE `api/console-session.php` | `X-Console-Session: 1` | `{"status":"ok"}`、セッションを破棄 |
+
+### OpenStreetMap ログイン
+
+`api/osm-auth.php` は両メソッドで `X-Console-Session: 1` が必要です。GET は有効化状況を返し、有効時は現在のセッションの `signed_in` と `linked` も返します。
+
+POST の例は `{"action":"link","lang":"ja"}` です。既存の管理画面セッションから連携を開始し、応答の `authorization_url` にブラウザーを遷移させます。`{"action":"login","lang":"ja"}` は連携済みアカウントでのログインを開始します。OpenStreetMap から戻った `api/osm-callback.php` が POST の `complete` を呼び出し、連携を保存するか、管理画面のセッションを発行します。
 
 CookieはHttpOnly・SameSite=Strict・有効期限なしです。通常はブラウザ終了で破棄されますが、ブラウザのセッション復元機能で復元される場合があります。確実に終了するにはログアウトしてください。24時間以上未使用のセッションは削除対象で、無効化・パスワード変更もセッションを無効にします。サーバーのセッション保存先には書き込み権限が必要です。詳細は[画面と管理操作](admin-guide.md)を参照してください。
 

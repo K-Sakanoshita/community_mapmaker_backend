@@ -30,6 +30,27 @@ final class ConsoleSession
         session_write_close();
     }
 
+    public static function beginOsmAuthorization(array $flow): void
+    {
+        self::start();
+        $_SESSION['osm_authorization'] = $flow;
+        session_write_close();
+    }
+
+    public static function consumeOsmAuthorization(string $state): ?array
+    {
+        if (!isset($_COOKIE['cmm_console']) || $state === '') return null;
+        self::start();
+        $flow = $_SESSION['osm_authorization'] ?? null;
+        if ($flow === null || !hash_equals($flow['state'], $state)) {
+            session_write_close();
+            return null;
+        }
+        unset($_SESSION['osm_authorization']);
+        session_write_close();
+        return $flow['expires_at'] >= time() ? $flow : null;
+    }
+
     public static function user(array $container): ?array
     {
         // This non-simple header prevents cross-site form requests using cookies.

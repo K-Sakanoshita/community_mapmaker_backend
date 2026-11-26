@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <script src="site-messages.js?v=20261027-project-settings"></script>
+  <script src="site-messages.js?v=20261126-osm"></script>
   <script src="site-language.js?v=20261024-language"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="site-footer.css?v=20261024">
   <link rel="stylesheet" href="mypage.css?v=20261024">
   <script src="site-session.js?v=20261024-username-link" defer></script>
+  <script src="osm-sign-in.js?v=1" defer></script>
   <script src="mypage.js?v=20261110-dashboard" defer></script>
 </head>
 <body>
@@ -33,6 +34,11 @@
   <main>
     <nav class="site-breadcrumbs" aria-label="現在の位置" data-site-i18n-aria-label="現在の位置"><ol><li><a href="./"><span data-site-i18n="ポータル">ポータル</span></a></li><li><span aria-current="page"><span data-site-i18n="マイページ">マイページ</span></span></li></ol></nav>
     <h1><span data-site-i18n="マイページ">マイページ</span></h1>
+    <section data-osm-action="link" aria-labelledby="osmConnectionTitle" hidden>
+      <h2 id="osmConnectionTitle"><span data-site-i18n="OpenStreetMap アカウント連携">OpenStreetMap アカウント連携</span></h2>
+      <button class="button" type="button"><span data-site-i18n="OpenStreetMap アカウントを連携する">OpenStreetMap アカウントを連携する</span></button>
+      <p role="status"></p>
+    </section>
     <section aria-labelledby="myProjectsTitle">
       <h2 id="myProjectsTitle"><span data-site-i18n="参加プロジェクト">参加プロジェクト</span></h2>
       <p class="description"><span data-site-i18n="参加しているプロジェクトを確認し、参加を解除できます。参加解除後も、投稿済みのデータは残ります。">参加しているプロジェクトを確認し、参加を解除できます。参加解除後も、投稿済みのデータは残ります。</span></p>

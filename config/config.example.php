@@ -19,6 +19,11 @@ return [
         'verification_url' => 'https://api.example.jp/verify-email.html',
         'password_reset_url' => 'https://api.example.jp/reset-password.html',
         'rate_limit_secret' => getenv('CMM_RATE_LIMIT_SECRET') ?: '',
+        'osm_oauth' => [
+            'client_id' => getenv('CMM_OSM_CLIENT_ID') ?: '',
+            'client_secret' => getenv('CMM_OSM_CLIENT_SECRET') ?: '',
+            'redirect_uri' => getenv('CMM_OSM_REDIRECT_URI') ?: '',
+        ],
         // Same-origin requests are allowed automatically. List other website origins here.
         'allowed_origins' => [
             'https://example.jp',

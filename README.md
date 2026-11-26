@@ -17,7 +17,7 @@ Activityは1投稿をDBの1レコードに保存し、サイト固有項目を`d
 
 PHP 8.1以上、PDO MySQL、MySQL 8.0以上または互換DB、`mail()`から送信可能なSendmail環境、HTTPSが必要です。
 
-1. 新規DBには`schema.sql`を適用します。既存DBは未適用の`migrations/001_activity_core.sql`から`migrations/013_project_page_rendering.sql`までを番号順に適用します。
+1. 新規DBには`schema.sql`を適用します。既存DBは未適用の`migrations/001_activity_core.sql`から`migrations/014_osm_identities.sql`までを番号順に適用します。
 2. `config/config.example.php`をWeb公開ディレクトリ外へコピーし、DB接続・許可Origin・メール送信者・確認URL・パスワード再設定URLを設定します。
 3. `CMM_AUTH_CONFIG`に実設定ファイルの絶対パス、`CMM_RATE_LIMIT_SECRET`に32文字以上のランダムな秘密値を設定します。
 4. 静的Projectは`activity.apps`に登録します。新規Projectは管理画面からDBへ作成できます。
@@ -41,6 +41,14 @@ community_mapmaker_backend/    # /home/ACCOUNT/ 配下の非公開リポジト�
 ```
 
 さくらでは `sh scripts/deploy-sakura.sh "$HOME/www/community-mapmaker-backend"` で `www/` の中身を公開先へコピーします。詳しい構成と更新手順は[配置ガイド](SAKURA_DEPLOY.md)を参照してください。
+
+### OpenStreetMap ログイン
+
+[OpenStreetMap の OAuth 2 アプリ登録](https://www.openstreetmap.org/oauth2/applications/new)で機密アプリケーションを作成し、権限はログイン用の `openid` を選びます。リダイレクト URI は、管理画面と同じオリジンの `https://example.jp/community-mapmaker-backend/api/osm-callback.php` のように、実際の公開 URL を登録します。
+
+既存 DB に `migrations/014_osm_identities.sql` を適用し、非公開の `config/config.php` の `auth.osm_oauth` に `client_id`、`client_secret`、登録した `redirect_uri` を設定します。PHP の cURL 拡張が必要です。
+
+利用者は既存の ID・パスワードでログインし、マイページで OSM アカウントを連携します。次回から管理画面の「OpenStreetMap でログイン」を使えます。連携には OSM のユーザー ID を保存します。既存のユーザー登録とプロジェクト権限は引き続き Community Map Maker で管理します。
 
 ### Activity設定
 

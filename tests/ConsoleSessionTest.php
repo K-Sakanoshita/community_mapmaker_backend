@@ -38,9 +38,18 @@ checkSession(ConsoleSession::user($container) === null, 'Account updates invalid
 ConsoleSession::establish($repo->user);
 $_COOKIE['cmm_console'] = session_id();
 checkSession(ConsoleSession::user($container) !== null, 'Updated users can establish fresh sessions.');
+$flow = ['state' => 'expected-state', 'expires_at' => time() + 60];
+ConsoleSession::beginOsmAuthorization($flow);
+checkSession(ConsoleSession::consumeOsmAuthorization('wrong-state') === null, 'OSM callbacks must match the pending state.');
+checkSession(ConsoleSession::consumeOsmAuthorization('expected-state') === $flow, 'A valid callback must recover the pending flow.');
+checkSession(ConsoleSession::consumeOsmAuthorization('expected-state') === null, 'OSM callbacks must be single use.');
+ConsoleSession::beginOsmAuthorization(['state' => 'expired', 'expires_at' => time() - 1]);
+checkSession(ConsoleSession::consumeOsmAuthorization('expired') === null, 'An expired OSM flow must be rejected.');
 $repo->user['password_hash'] = 'hash-two';
 checkSession(ConsoleSession::user($container) === null, 'Password changes must invalidate old sessions.');
+ConsoleSession::beginOsmAuthorization($flow);
 ConsoleSession::destroy();
+checkSession(ConsoleSession::consumeOsmAuthorization('expected-state') === null, 'Logout must discard a pending OSM flow.');
 checkSession(ConsoleSession::user($container) === null, 'Logout must invalidate the session.');
 ConsoleSession::destroy();
 echo "Console session behavior: ok\n";
