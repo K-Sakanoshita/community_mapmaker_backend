@@ -97,6 +97,7 @@ chmod +x scripts/deploy-sakura.sh
 - `CMM_SAKURA_CONFIG_FILE` 未指定時は非公開側の `config/config.php` を利用
 - 旧構成の公開側 `bootstrap.php`、`lib/`、`config/` を削除
 - `.htaccess` でディレクトリ一覧と `_runtime.php` の直接アクセスを拒否
+- `api/.htaccess` の `CGIPassAuth On` で、外部アプリが使う投稿 API と `external-me.php` に `Authorization` ヘッダーを渡す
 - 公開側のPHPファイルを755、その他の通常ファイルを644、ディレクトリを755に設定
 
 公開先が非公開リポジトリの内部や親フォルダーに当たる場合、または実設定が公開先の内部にある場合は、配置を中止します。公開先はこのアプリ専用のフォルダーを指定してください。

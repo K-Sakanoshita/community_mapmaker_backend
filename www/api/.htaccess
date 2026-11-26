@@ -1,0 +1,3 @@
+<FilesMatch "^(activities(-batch)?|external-me)[.]php$">
+    CGIPassAuth On
+</FilesMatch>
