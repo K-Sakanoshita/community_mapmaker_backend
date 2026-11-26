@@ -367,14 +367,14 @@ async function connect(restore = false) {
     if (requestedProjectUnavailable) setStatus(t("projects.unavailable"), true);
   } catch (error) {
     const message = restore
-      ? t("message.e09b9a5730bc")
+      ? ""
       : error.code === 'authentication_required'
         ? t("message.5a5920b3fe2f")
         : `${t("message.4c1ac64e5908")}${error.message}`;
     setLoginStatus(message, !restore);
     if (restore) {
       els.loginScreen.hidden = false;
-      els.userid.focus();
+      if (document.getElementById("passwordLoginMethods")?.open) els.userid.focus();
     } else {
       els.password.select();
     }

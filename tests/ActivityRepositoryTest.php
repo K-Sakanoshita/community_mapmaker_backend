@@ -161,18 +161,27 @@ echo "Recent Activity list tests passed.\n";
 // Shadow users as well, so editor rename/deletion never touches real accounts.
 $usersDdl = $pdo->query('SHOW CREATE TABLE users')->fetch()['Create Table'];
 $pdo->exec(str_replace('CREATE TABLE', 'CREATE TEMPORARY TABLE', $usersDdl));
+$pdo->exec('CREATE TEMPORARY TABLE osm_identities (user_id BIGINT UNSIGNED PRIMARY KEY, osm_display_name VARCHAR(255))');
+$pdo->exec('CREATE TEMPORARY TABLE userid_aliases (userid_normalized VARCHAR(64) PRIMARY KEY, user_id BIGINT UNSIGNED NOT NULL)');
+$pdo->exec("INSERT INTO userid_aliases (userid_normalized, user_id) VALUES ('previous-editor', 900000001)");
 $pdo->exec("INSERT INTO users (id, userid, userid_normalized, password_hash, status, role, created_at, updated_at) VALUES
     (900000001, 'editor-first', 'editor-first', 'unused', 'active', 'user', UTC_TIMESTAMP(), UTC_TIMESTAMP()),
     (900000002, 'editor-next', 'editor-next', 'unused', 'active', 'user', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
-$editorInput = ['app' => 'test', 'id' => 'editor/1', 'osmid' => 'node/950', 'name' => 'Edited item', 'updated_by_userid' => 'spoofed'];
+$pdo->exec("INSERT INTO osm_identities (user_id, osm_display_name) VALUES (900000002, 'OSM 編集者')");
+$editorInput = ['app' => 'test', 'id' => 'editor/1', 'osmid' => 'node/950', 'name' => 'Edited item',
+    'updated_by_userid' => 'spoofed', 'updated_by_osm_display_name' => 'spoofed'];
 $editorCreated = $service->create($editorInput, false, 900000001);
 $check($editorCreated['updated_by_userid'] === 'editor-first', 'Creation must return the authenticated editor userid, ignoring input');
+$check($editorCreated['updated_by_osm_display_name'] === null, 'An editor without OSM has no OSM display name.');
 $editorUpdated = $service->update('editor/1', $editorInput, false, 900000002);
 $check($editorUpdated['updated_by_userid'] === 'editor-next', 'Update must return the latest editor rather than the creator');
 $repoRow = $repo->find('test', 'editor/1');
 $check(!array_key_exists('updated_by_userid', $repoRow['data']), 'Editor userid is server metadata, not writable JSON');
+$check(!array_key_exists('updated_by_osm_display_name', $repoRow['data']), 'OSM display name is server metadata.');
+$check($editorUpdated['updated_by_osm_display_name'] === 'OSM 編集者', 'An edit must return the authenticated editor’s OSM display name.');
 $check($service->find('test', 'editor/1')['updated_by_userid'] === 'editor-next', 'Individual GET must resolve editor');
 $check($service->list('test', 'node/950', ['summary' => '1'])[0]['updated_by_userid'] === 'editor-next', 'Summary must include editor');
+$check($service->list('test', 'node/950', ['summary' => '1'])[0]['updated_by_osm_display_name'] === 'OSM 編集者', 'Summary must include the OSM display name.');
 $check($service->listSelected('test', ['osmids' => 'node/950'])[0]['updated_by_userid'] === 'editor-next', 'Candidate selection must include editor');
 $bboxEditors = array_column($service->listSelected('test', ['bbox' => '135,35,135.5,35.5']), 'updated_by_userid', 'id');
 $check($bboxEditors['editor/1'] === 'editor-next', 'BBOX union must include unlocated editor metadata');
@@ -182,6 +191,7 @@ $repo->create('test', 'editor/4', null, 'node/950', ['name' => 'edited item', 's
 $filters = ['userid' => 'EDITOR-FIRST', 'filter' => ['name' => 'edited item', 'status.code' => 'true']];
 $check(array_column($service->list('test', 'node/950', $filters + ['limit' => '1']), 'id') === ['editor/3'], 'Creator and scalar field filters run before the limit');
 $check(array_column($service->list('test', 'node/950', ['userid' => 'editor-first', 'filter' => ['name' => 'Edited item']]), 'id') === ['editor/1'], 'Creator filter is independent of latest editor and field values are case sensitive');
+$check(array_column($service->list('test', 'node/950', ['userid' => 'PREVIOUS-EDITOR', 'filter' => ['name' => 'Edited item']]), 'id') === ['editor/1'], 'A former public user ID must resolve to the same creator.');
 $check(array_column($service->listSelected('test', $filters + ['bbox' => '135,35,135.5,35.5']), 'id') === ['editor/3'], 'BBOX union applies creator and field filters');
 $check(array_column($service->listSelected('test', $filters + ['osmids' => 'node/950']), 'id') === ['editor/3'], 'OSM ID selection applies creator and field filters');
 $filteredBatch = $service->listBatch('test', $filters + ['batch' => '1', 'limit' => '1']);
@@ -191,6 +201,8 @@ foreach ([['userid' => []], ['filter' => 'bad'], ['filter' => ['name' => ['neste
 }
 $pdo->exec("UPDATE users SET userid='editor-renamed' WHERE id=900000002");
 $check($service->find('test', 'editor/1')['updated_by_userid'] === 'editor-renamed', 'Userid must resolve the current account value');
+$pdo->exec("UPDATE osm_identities SET osm_display_name='OSM 改名後' WHERE user_id=900000002");
+$check($service->find('test', 'editor/1')['updated_by_osm_display_name'] === 'OSM 改名後', 'Attribution must reflect the last synced OSM name.');
 $pdo->exec('DELETE FROM users WHERE id=900000002');
 $check($service->find('test', 'editor/1')['updated_by_userid'] === null, 'Missing editor account must return null without dropping the activity');
 $check($service->list('test', 'node/900')[0]['updated_by_userid'] === null, 'Legacy unrecorded editor must return null');

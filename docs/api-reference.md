@@ -21,7 +21,8 @@
 | GET / POST | [`api/project-membership.php`](#プロジェクトへの自己参加) | 参加状態確認・本人の参加 | POSTはログイン必須 |
 | GET | [`api/project-trash.php`](#削除済みproject) | 削除済み管理画面への転送（JSONではない） | 管理者セッション |
 | GET / POST | [`api/project-trash-data.php`](#削除済みproject) | 削除済み一覧・復元・物理削除 | `admin` |
-| GET / POST / DELETE | [`api/console-session.php`](#管理画面のセッション) | セッション復元・ログイン・ログアウト | 操作別（下表） |
+| GET / POST / PATCH / DELETE | [`api/console-session.php`](#管理画面のセッション) | セッション復元・ログイン・公開用 ID 変更・ログアウト | 操作別（下表） |
+| GET / POST | [`api/console-password.php`](#ログイン用パスワードの設定) | 本人のログイン用パスワード設定・変更 | 管理画面のセッション |
 | GET / POST | [`api/osm-auth.php`](#openstreetmap-ログイン) | OpenStreetMap 登録・連携・ログイン | 管理画面と同じオリジン |
 | GET / POST / PUT | [`api/admin-users.php`](#ユーザー管理) | ユーザー管理 | `admin` |
 | GET | [`api/admin-audit-logs.php`](#監査ログ) | 監査ログ一覧 | `admin` |
@@ -96,7 +97,7 @@
 | `osmid` | — | `node/123`, `way/123`, `relation/123` | 単一OSM IDで絞り込み |
 | `osmids` | — | カンマ区切りまたは`osmids[]`配列、最大1,000種類 | 空要素・重複を除く。空指定は空配列 |
 | `bbox` | — | `west,south,east,north` | 保存済み座標で絞り込み。境界を含む |
-| `userid` | — | ログイン用ユーザーID | 投稿を作成したアカウントで絞り込み。大文字・小文字は区別しない |
+| `userid` | — | 公開用ユーザーID | 投稿を作成したアカウントで絞り込み。大文字・小文字は区別しない |
 | `filter[項目キー]` | — | 文字列 | 投稿のカスタム項目を値で完全一致検索。複数指定するとすべての条件に一致する投稿を返す |
 | `updated_since` | — | タイムゾーン付きRFC3339日時 | 指定日時以降の更新。境界を含む |
 | `limit` | — | 整数1〜100。省略時は制限なし | 最大取得件数。不正値・100超は422 |
@@ -110,7 +111,7 @@
 - `osmids`指定時は`bbox`を無視します。`osmid`は`osmids`・`bbox`と併用できません。
 - `updated_since`・`limit`・`summary`は一覧専用です。`id`との併用は422。OSM ID・BBOX絞り込み、CSVとは併用できます。
 - `userid` と `filter` は一覧専用です。`id` との併用は422です。OSM ID・BBOX・更新日時での絞り込みや、CSV・概要・分割取得と併用できます。絞り込みは件数制限より先に適用します。
-- `userid` には初回作成者の現在のユーザーIDを指定します。作成者が記録されていない投稿や、アカウントへの紐付けが解除された投稿は一致しません。
+- `userid` には初回作成者の公開用ユーザー ID を指定します。変更前の ID でも同じ作成者の投稿を取得できます。作成者が記録されていない投稿や、アカウントへの紐付けが解除された投稿は一致しません。
 - `filter` のキーには `data_json` に保存された最上位のカスタム項目を指定できます。文字列・数値・真偽値を文字列として比較し、大文字・小文字や空白を区別します。キーの欠落、`null`、配列、オブジェクトは一致しません。
 - 更新日時の降順、同時刻は内部IDの降順。削除済みActivityは除外します。
 - 引数省略時は従来の全件・全フィールド取得です。最新30件の表示には`limit=30&summary=1`を指定します。分割取得は`batch=1`を指定します。
@@ -146,12 +147,13 @@
 | `id` | string | 投稿ID。DBの内部IDは返さない |
 | `osmid` | string | OSM ID |
 | `created_at`, `updated_at` | string | 作成・更新日時（UTC） |
-| `updated_by_userid` | string / null | 最終編集者のログイン用ユーザーID（`users.userid`）。未記録・ユーザー削除済みはnull |
+| `updated_by_userid` | string / null | 最終編集者の公開用ユーザーID（`users.userid`）。未記録・ユーザー削除済みはnull |
+| `updated_by_osm_display_name` | string / null | 最終編集者の OpenStreetMap 表示名。JSON 応答に含まれます。OSM 認証時に同期し、未連携・未取得の場合はnull |
 | `latitude`, `longitude` | number / null | 保存済み位置スナップショット。常に返す |
 | `form_key` | string | 存在する場合のみ |
 | 可変項目 | Schema・保存値による | `name`、`title`、`body`などを同じ階層へ展開 |
 
-`summary=1`では`id`・`osmid`・日時・座標・`updated_by_userid`と、存在する場合の`form_key`・`name`だけを返します。表示名は保存された`name`です。DB内部ID・`data_json`・削除フラグは返しません。
+`summary=1`では`id`・`osmid`・日時・座標・`updated_by_userid`・`updated_by_osm_display_name`と、存在する場合の`form_key`・`name`を返します。`name` は投稿の保存値です。DB内部ID・`data_json`・削除フラグは返しません。
 
 CSVの通常列は`id,osmid,latitude,longitude,form_key,updated_by_userid`とSchemaの定義列です。`summary=1`のCSVは`id,osmid,created_at,updated_at,latitude,longitude,form_key,name,updated_by_userid`です。
 
@@ -181,7 +183,7 @@ POST・PUTは次の本文を送ります。PUTは部分更新ではなく、Sche
 | `form_key` | 任意 |
 | `latitude`, `longitude` | 任意。変更する場合は必ず両方を指定（下表） |
 | 可変項目 | 対象アプリのSchemaで検証。Schemaにない安全なキーも保持 |
-| `created_at`, `updated_at`, `updated_by_userid`, `is_deleted`, `deleted_at` | サーバー管理項目。入力しても設定されない |
+| `created_at`, `updated_at`, `updated_by_userid`, `updated_by_osm_display_name`, `is_deleted`, `deleted_at` | サーバー管理項目。入力しても設定されない |
 
 ```json
 {
@@ -365,7 +367,16 @@ Schemaの各フィールドは`label`、`type`、`required`、`order`、管理�
 | GET `api/console-session.php` | CookieまたはHTTP Basic | `user`（`id`, `userid`, `role`）, `projects`（参照可能なProject配列） |
 | GET `api/console-session.php?summary=1` | 同上 | `user`のみ。共通ヘッダーの状態確認用で、Project取得・投稿件数集計は行いません |
 | POST `api/console-session.php` | 有効な認証＋`X-Console-Session: 1`。通常はHTTP Basicでログイン | 上記応答＋セッションCookieを設定 |
+| PATCH `api/console-session.php` | サインイン済み Cookie と `X-Console-Session: 1` | 本人の公開用 ID を変更し、`user` を返す |
 | DELETE `api/console-session.php` | `X-Console-Session: 1` | `{"status":"ok"}`、セッションを破棄 |
+
+公開用 ID の変更は、PATCH に JSON `{"current_userid":"old-map-id","userid":"new-map-id"}` を送ります。ID は先頭が英数字の3〜64文字で、英数字、ピリオド、アンダースコア、ハイフンを使えます。他のアカウントで使用中または使用した ID は `409 userid_taken`、現在の ID が送信値と一致しない場合は `409 userid_changed` です。変更前の ID は公開 Activity 検索に利用でき、ID でのログインには変更後の ID を使います。
+
+### ログイン用パスワードの設定
+
+`api/console-password.php` は管理画面のセッション Cookie と `X-Console-Session: 1` が必要です。GET は `requires_current_password`、`password_min_length` と `password_max_bytes` を返します。
+
+POST は `password` と `password_confirmation` を受け取ります。パスワードで認証したセッションでは `current_password` も必要です。OSM ログイン済みのセッションで設定する例は `{"password":"long-password","password_confirmation":"long-password"}` です。成功時は `{"status":"ok"}` を返し、セッション Cookie を更新します。
 
 ### OpenStreetMap ログイン
 
@@ -373,7 +384,7 @@ Schemaの各フィールドは`label`、`type`、`required`、`order`、管理�
 
 POST の例は `{"action":"link","lang":"ja"}` です。既存の管理画面セッションから連携を開始し、応答の `authorization_url` にブラウザーを遷移させます。`{"action":"login","lang":"ja"}` は連携済みアカウントでのログインを開始します。OpenStreetMap から戻った `api/osm-callback.php` が POST の `complete` を呼び出し、連携を保存するか、管理画面のセッションを発行します。
 
-新規登録の POST 例は `{"action":"register","lang":"ja","userid":"map-user","app_key":"","privacy_acknowledged":true}` です。`app_key` が空なら参加先なしで登録します。参加先を指定する場合は公開中かつ募集中のプロジェクトに限ります。認証完了時にアカウント、OSM の紐付け、参加権限を一括で作成します。
+新規登録の POST 例は `{"action":"register","lang":"ja","app_key":"","privacy_acknowledged":true}` です。`app_key` が空なら参加先なしで登録します。参加先を指定する場合は公開中かつ募集中のプロジェクトに限ります。認証完了時に公開用ユーザー ID を自動発行し、アカウント、OSM の紐付け、参加権限を一括で作成します。
 
 CookieはHttpOnly・SameSite=Strict・有効期限なしです。通常はブラウザ終了で破棄されますが、ブラウザのセッション復元機能で復元される場合があります。確実に終了するにはログアウトしてください。24時間以上未使用のセッションは削除対象で、無効化・パスワード変更もセッションを無効にします。サーバーのセッション保存先には書き込み権限が必要です。詳細は[画面と管理操作](admin-guide.md)を参照してください。
 
@@ -435,7 +446,7 @@ CookieはHttpOnly・SameSite=Strict・有効期限なしです。通常はブラ
 | メソッド・パス | 必須入力 | 成功応答 |
 | --- | --- | --- |
 | GET `auth/registration-projects.php` | なし | 200、`projects`（登録対象の公開Projectの`app_key`, `project_name`, `frontend_url`） |
-| POST `auth/register.php` | `userid`, `email`, `password`, `password_confirmation` | 201、`status: "ok"`, `verification_required`, `verification_email_sent` |
+| POST `auth/register.php` | `email`, `password`, `password_confirmation` | 201、`status: "ok"`, `verification_required`, `verification_email_sent` |
 | POST `auth/resend-verification.php` | `identity`（ユーザーIDまたはメール） | 202、`status: "ok"`, `accepted`, `verification_email_sent` |
 | GET `auth/verify.php` | クエリ`token` | 200、`status: "ok"`, `email_verified: true`, `projects`（確認したアカウントの参加先のうち有効・公開のProject） |
 | POST `auth/request-password-reset.php` | `email` | 202、`status: "ok"`, `accepted: true`, `message` |
@@ -443,13 +454,13 @@ CookieはHttpOnly・SameSite=Strict・有効期限なしです。通常はブラ
 
 ```json
 {
-  "userid": "sakano",
   "email": "example@example.jp",
   "password": "long-password",
   "password_confirmation": "long-password"
 }
 ```
 
+- メール登録はメールアドレスでログインします。公開用ユーザー ID は自動発行されます。既存の API クライアントは任意の `userid` を送れます。
 - 登録時のアカウントroleは`user`（一般ユーザー）。メール確認必須なら`pending`、任意なら`active`です。有効化後は管理画面で自分のProjectを作成・管理できます。参加先には別途Projectの`contributor`を付与し、そのProjectの設定・管理画面の表は利用できません。
 - 任意の`app_key`を送ると、そのProjectへ`contributor`として自動参加します。対象は有効・未削除・`frontend_public: true`・`recruiting: true`のProjectだけです。対象外の指定は422となりアカウントを作りません。アカウント作成と参加設定は同一トランザクションで行います。`app_key`を省略した場合は参加Projectなしで登録します。
 - 登録画面のURLに`register.html?app_key=playgrounds`のようにProject識別子を指定すると参加先が初期選択されます。画面で参加先を変更でき、選択値が登録APIへ送られます。URL引数なしでも公開Projectを選択できます。アカウントやProjectのroleを登録リクエストで昇格することはできません。

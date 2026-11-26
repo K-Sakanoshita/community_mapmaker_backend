@@ -76,7 +76,8 @@ try {
     if (!is_string($code) || $code === '' || strlen($code) > 2048) {
         Http::respond(400, $result + ['code' => 'osm_authorization_cancelled']);
     }
-    $subject = $osm->subject($code, $flow['verifier']);
+    $profile = $osm->profile($code, $flow['verifier']);
+    $subject = $profile['subject'];
     // Re-read the session in case it changed while OpenStreetMap was contacted.
     $user = ConsoleSession::user($container);
     if (($user === null ? null : (int)$user['id']) !== $flow['user_id']) {
@@ -84,14 +85,15 @@ try {
     }
 
     if ($result['link']) {
-        if (!$identities->link((int)$user['id'], $subject)) {
+        if (!$identities->link((int)$user['id'], $subject, $profile['display_name'])) {
             Http::respond(409, $result + ['code' => 'osm_link_conflict']);
         }
     } else {
         $id = $identities->userId($subject);
+        $created = null;
         if ($id === null && isset($flow['registration'])) {
             $created = $container['auth']->registerOsm(
-                $flow['registration'], Http::clientIdentifier($container['auth_config']), $subject, $identities
+                $flow['registration'], Http::clientIdentifier($container['auth_config']), $profile, $identities
             );
             $id = (int)$created['id'];
         }
@@ -100,8 +102,11 @@ try {
         if ($user === null || $user['status'] !== 'active' || !in_array($user['role'], ['user', 'admin'], true)) {
             Http::respond(403, $result + ['code' => 'osm_account_unavailable']);
         }
+        if ($created === null && $profile['display_name'] !== null) {
+            $identities->updateDisplayName($id, $subject, $profile['display_name']);
+        }
         $container['user_repo']->recordLogin($id);
-        ConsoleSession::establish($user);
+        ConsoleSession::establish($user, 'osm');
     }
     Http::respond(200, $result + ['status' => 'ok']);
 } catch (AuthDisabledException) {

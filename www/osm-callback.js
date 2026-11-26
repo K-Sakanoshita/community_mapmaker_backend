@@ -15,7 +15,7 @@ const messages = {
   back_to_registration: ['登録画面へ戻る', 'Return to registration'],
   osm_account_unlinked: ['この OSM アカウントはまだ連携されていません。新しく利用する場合は OpenStreetMap で登録してください。既存アカウントをお持ちの場合はマイページから連携できます。', 'This OSM account is not linked. Register with OpenStreetMap, or link your existing Community Map Maker account from My Page.'],
   osm_account_unlinked_closed: ['この OSM アカウントはまだ連携されていません。既存アカウントをお持ちの場合はマイページから連携できます。', 'This OSM account is not linked. You can link your existing Community Map Maker account from My Page.'],
-  identity_already_registered: ['このユーザー ID は使用されています。別の ID で登録するか、既存アカウントにログインして連携してください。', 'This user ID is already in use. Choose a different ID or sign in to link your existing account.'],
+  identity_already_registered: ['公開用ユーザー ID を発行できませんでした。もう一度お試しください。', 'Could not generate your public user ID. Please try again.'],
   project_unavailable: ['選択したプロジェクトは現在参加を受け付けていません。登録画面で参加先を選び直してください。', 'The selected project is no longer accepting registrations. Return to registration and choose a different project.'],
   registration_disabled: ['現在、ユーザー登録を受け付けていません。', 'Registration is currently unavailable.'],
   rate_limit_exceeded: ['操作が多すぎます。時間をおいて再度お試しください。', 'Too many attempts. Wait and try again.'],

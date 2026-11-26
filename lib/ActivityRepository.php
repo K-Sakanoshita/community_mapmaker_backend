@@ -10,6 +10,11 @@ use RuntimeException;
 
 final class ActivityRepository implements ActivityRepositoryInterface
 {
+    private const ACTIVITY_COLUMNS = 'id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, '
+        . 'created_by_user_id, updated_by_user_id, created_at, updated_at, '
+        . '(SELECT userid FROM users WHERE users.id = activities.updated_by_user_id) AS updated_by_userid, '
+        . '(SELECT osm_display_name FROM osm_identities WHERE user_id = activities.updated_by_user_id) AS updated_by_osm_display_name';
+
     /** A public count and update timestamp; never expose arbitrary post fields or user data. */
     public function publicParkSummary(string $appKey, string $osmid): array
     {
@@ -25,7 +30,7 @@ final class ActivityRepository implements ActivityRepositoryInterface
 
     public function list(string $appKey, ?string $osmid = null, array $options = []): array
     {
-        $sql = 'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at, (SELECT userid FROM users WHERE users.id = activities.updated_by_user_id) AS updated_by_userid '
+        $sql = 'SELECT ' . self::ACTIVITY_COLUMNS . ' '
             . 'FROM activities WHERE is_deleted = 0 AND app_key = :app_key';
         $params = [':app_key' => $appKey];
         if ($osmid !== null) {
@@ -43,7 +48,7 @@ final class ActivityRepository implements ActivityRepositoryInterface
     {
         if ($osmids === []) return [];
         if ($bbox !== null && $osmids === null) {
-            $select = 'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at, (SELECT userid FROM users WHERE users.id = activities.updated_by_user_id) AS updated_by_userid FROM activities WHERE is_deleted = 0 AND app_key = ';
+            $select = 'SELECT ' . self::ACTIVITY_COLUMNS . ' FROM activities WHERE is_deleted = 0 AND app_key = ';
             $sql = $select . ':app_key_bbox AND longitude BETWEEN :west AND :east AND latitude BETWEEN :south AND :north '
                 . 'UNION ALL ' . $select . ':app_key_unlocated AND longitude IS NULL AND latitude IS NULL';
             return $this->listRows($sql, [
@@ -51,7 +56,7 @@ final class ActivityRepository implements ActivityRepositoryInterface
                 ':west' => $bbox[0], ':south' => $bbox[1], ':east' => $bbox[2], ':north' => $bbox[3],
             ], $options, true);
         }
-        $sql = 'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at, (SELECT userid FROM users WHERE users.id = activities.updated_by_user_id) AS updated_by_userid '
+        $sql = 'SELECT ' . self::ACTIVITY_COLUMNS . ' '
             . 'FROM activities WHERE is_deleted = 0 AND app_key = :app_key';
         $params = [':app_key' => $appKey];
         if ($bbox !== null) {
@@ -78,8 +83,9 @@ final class ActivityRepository implements ActivityRepositoryInterface
             $params[':updated_since'] = $options['updated_since'];
         }
         if (isset($options['userid'])) {
-            $conditions[] = 'created_by_user_id = (SELECT id FROM users WHERE userid_normalized = :userid)';
-            $params[':userid'] = $options['userid'];
+            $conditions[] = 'created_by_user_id = COALESCE((SELECT id FROM users WHERE userid_normalized = :userid),
+                (SELECT user_id FROM userid_aliases WHERE userid_normalized = :userid_alias))';
+            $params[':userid'] = $params[':userid_alias'] = $options['userid'];
         }
         foreach ($options['filter'] ?? [] as $key => $value) {
             $index = count($conditions);
@@ -102,7 +108,7 @@ final class ActivityRepository implements ActivityRepositoryInterface
     public function find(string $appKey, string $activityKey): ?array
     {
         $statement = $this->pdo->prepare(
-            'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at, (SELECT userid FROM users WHERE users.id = activities.updated_by_user_id) AS updated_by_userid '
+            'SELECT ' . self::ACTIVITY_COLUMNS . ' '
             . 'FROM activities WHERE is_deleted = 0 AND app_key = :app_key AND activity_key = :activity_key LIMIT 1'
         );
         $statement->execute([':app_key' => $appKey, ':activity_key' => $activityKey]);
@@ -113,7 +119,7 @@ final class ActivityRepository implements ActivityRepositoryInterface
     public function findForImport(string $appKey, string $activityKey): ?array
     {
         $statement = $this->pdo->prepare(
-            'SELECT id, app_key, activity_key, form_key, osmid, latitude, longitude, data_json, created_by_user_id, updated_by_user_id, created_at, updated_at, (SELECT userid FROM users WHERE users.id = activities.updated_by_user_id) AS updated_by_userid, is_deleted '
+            'SELECT ' . self::ACTIVITY_COLUMNS . ', is_deleted '
             . 'FROM activities WHERE app_key = :app_key AND activity_key = :activity_key LIMIT 1'
         );
         $statement->execute([':app_key' => $appKey, ':activity_key' => $activityKey]);

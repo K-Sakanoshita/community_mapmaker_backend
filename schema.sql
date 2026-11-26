@@ -4,7 +4,7 @@ CREATE TABLE users (
     userid_normalized VARCHAR(64) NOT NULL,
     email VARCHAR(255) NULL,
     email_normalized VARCHAR(255) NULL,
-    password_hash VARCHAR(255) NOT NULL,
+    password_hash VARCHAR(255) NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'pending',
     role VARCHAR(32) NOT NULL DEFAULT 'user',
     email_verified_at DATETIME NULL,
@@ -17,9 +17,16 @@ CREATE TABLE users (
     KEY idx_users_role_status (role, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE userid_aliases (
+    userid_normalized VARCHAR(64) NOT NULL PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    CONSTRAINT fk_userid_aliases_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE osm_identities (
     user_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
     osm_subject VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    osm_display_name VARCHAR(255) NULL,
     UNIQUE KEY uq_osm_identities_subject (osm_subject),
     CONSTRAINT fk_osm_identities_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

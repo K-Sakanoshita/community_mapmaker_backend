@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <script src="site-messages.js?v=20261126-osm"></script>
+  <script src="site-messages.js?v=20261126-osm-login-methods"></script>
   <script src="site-language.js?v=20261024-language"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
@@ -13,10 +13,10 @@
   <link rel="stylesheet" href="theme.css?v=20261024">
   <link rel="stylesheet" href="site-header.css?v=20261024-language">
   <link rel="stylesheet" href="site-footer.css?v=20261024">
-  <link rel="stylesheet" href="mypage.css?v=20261024">
-  <script src="site-session.js?v=20261024-username-link" defer></script>
+  <link rel="stylesheet" href="mypage.css?v=20261126-osm-login-methods">
+  <script src="site-session.js?v=20261126-edit-userid" defer></script>
   <script src="osm-sign-in.js?v=1" defer></script>
-  <script src="mypage.js?v=20261110-dashboard" defer></script>
+  <script src="mypage.js?v=20261126-osm-login-methods" defer></script>
 </head>
 <body>
   <header class="site-header">
@@ -34,9 +34,35 @@
   <main>
     <nav class="site-breadcrumbs" aria-label="現在の位置" data-site-i18n-aria-label="現在の位置"><ol><li><a href="./"><span data-site-i18n="ポータル">ポータル</span></a></li><li><span aria-current="page"><span data-site-i18n="マイページ">マイページ</span></span></li></ol></nav>
     <h1><span data-site-i18n="マイページ">マイページ</span></h1>
+    <section id="useridSettings" aria-labelledby="useridTitle" hidden>
+      <h2 id="useridTitle"><span data-site-i18n="公開用ユーザー ID">公開用ユーザー ID</span></h2>
+      <form id="useridForm">
+        <label for="newUserid"><span data-site-i18n="ユーザー ID">ユーザー ID</span></label>
+        <div class="userid-fields">
+          <input id="newUserid" name="userid" minlength="3" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_.\-]{2,63}" autocomplete="off" aria-describedby="useridRules useridHelp" required>
+          <button type="submit"><span data-site-i18n="ユーザー ID を保存">ユーザー ID を保存</span></button>
+        </div>
+        <p id="useridRules" class="description"><span data-site-i18n="英数字で始まる3〜64文字。英数字、ピリオド、アンダースコア、ハイフンを使えます。">英数字で始まる3〜64文字。英数字、ピリオド、アンダースコア、ハイフンを使えます。</span></p>
+        <p id="useridHelp" class="description"><span data-site-i18n="ID とパスワードでログインする場合は、変更後の ID を使ってください。以前の公開マップの URL も引き続き使えます。">ID とパスワードでログインする場合は、変更後の ID を使ってください。以前の公開マップの URL も引き続き使えます。</span></p>
+        <p id="useridStatus" role="status"></p>
+      </form>
+    </section>
+    <details id="passwordSettings" hidden>
+      <summary><span data-site-i18n="ログイン用パスワードを設定・変更する">ログイン用パスワードを設定・変更する</span></summary>
+      <p class="description"><span data-site-i18n="ユーザー ID または確認済みのメールアドレスでログインするときに使います。">ユーザー ID または確認済みのメールアドレスでログインするときに使います。</span></p>
+      <form id="consolePasswordForm" method="post">
+        <label id="currentPasswordField"><span data-site-i18n="現在のパスワード">現在のパスワード</span><input type="password" name="current_password" autocomplete="current-password" maxlength="4096" required></label>
+        <label><span data-site-i18n="新しいパスワード">新しいパスワード</span><input type="password" name="password" autocomplete="new-password" aria-describedby="consolePasswordRules" required></label>
+        <p id="consolePasswordRules" class="description"></p>
+        <label><span data-site-i18n="新しいパスワード（確認）">新しいパスワード（確認）</span><input type="password" name="password_confirmation" autocomplete="new-password" required></label>
+        <button type="submit" disabled><span data-site-i18n="パスワードを保存">パスワードを保存</span></button>
+        <p id="consolePasswordStatus" role="status"></p>
+      </form>
+    </details>
     <section data-osm-action="link" aria-labelledby="osmConnectionTitle" hidden>
       <h2 id="osmConnectionTitle"><span data-site-i18n="OpenStreetMap アカウント連携">OpenStreetMap アカウント連携</span></h2>
       <button class="button" type="button"><span data-site-i18n="OpenStreetMap アカウントを連携する">OpenStreetMap アカウントを連携する</span></button>
+      <p><span data-site-i18n="OpenStreetMap の表示名は、編集者名として公開 API に表示されます。">OpenStreetMap の表示名は、編集者名として公開 API に表示されます。</span></p>
       <p role="status"></p>
     </section>
     <section aria-labelledby="myProjectsTitle">

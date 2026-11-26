@@ -27,14 +27,20 @@ final class OsmIdentityRepository
         return $id === false ? null : (int)$id;
     }
 
-    public function link(int $userId, string $subject): bool
+    public function updateDisplayName(int $userId, string $subject, string $displayName): void
+    {
+        $query = $this->pdo->prepare('UPDATE osm_identities SET osm_display_name = ? WHERE user_id = ? AND osm_subject = ?');
+        $query->execute([$displayName, $userId, $subject]);
+    }
+
+    public function link(int $userId, string $subject, ?string $displayName = null): bool
     {
         $query = $this->pdo->prepare(
-            "INSERT INTO osm_identities (user_id, osm_subject)
-             SELECT id, ? FROM users WHERE id = ? AND status = 'active' AND role IN ('user', 'admin')"
+            "INSERT INTO osm_identities (user_id, osm_subject, osm_display_name)
+             SELECT id, ?, ? FROM users WHERE id = ? AND status = 'active' AND role IN ('user', 'admin')"
         );
         try {
-            $query->execute([$subject, $userId]);
+            $query->execute([$subject, $displayName, $userId]);
             return $query->rowCount() === 1;
         } catch (PDOException $error) {
             if ((string)$error->getCode() !== '23000') throw $error;

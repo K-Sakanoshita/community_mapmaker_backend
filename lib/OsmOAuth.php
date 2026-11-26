@@ -39,7 +39,8 @@ final class OsmOAuth
         ], '', '&', PHP_QUERY_RFC3986);
     }
 
-    public function subject(string $code, string $verifier): string
+    /** @return array{subject: string, display_name: ?string} */
+    public function profile(string $code, string $verifier): array
     {
         $token = self::request('/oauth2/token', [
             'grant_type' => 'authorization_code',
@@ -53,11 +54,17 @@ final class OsmOAuth
             throw new RuntimeException('OSM returned an invalid access token.');
         }
         // The profile comes directly from the issuer over HTTPS using the token just exchanged.
-        $subject = self::request('/oauth2/userinfo', token: $token)['sub'] ?? null;
+        $profile = self::request('/oauth2/userinfo', token: $token);
+        $subject = $profile['sub'] ?? null;
         if ((!is_string($subject) && !is_int($subject)) || !preg_match('/\A[1-9][0-9]{0,19}\z/', (string)$subject)) {
             throw new RuntimeException('OSM returned an invalid account identifier.');
         }
-        return (string)$subject;
+        $name = $profile['preferred_username'] ?? null;
+        if (!is_string($name) || trim($name) === '' || mb_strlen($name, 'UTF-8') > 255
+            || preg_match('/[\x00-\x1f\x7f]/', $name)) {
+            $name = null;
+        }
+        return ['subject' => (string)$subject, 'display_name' => $name];
     }
 
     private static function request(string $path, ?array $fields = null, ?string $token = null): array

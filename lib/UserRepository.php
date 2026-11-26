@@ -6,6 +6,7 @@ namespace CommunityMapMaker\Auth;
 use PDO;
 use PDOException;
 use RuntimeException;
+use Throwable;
 
 final class UserRepository implements UserRepositoryInterface
 {
@@ -13,13 +14,15 @@ final class UserRepository implements UserRepositoryInterface
     {
     }
 
-    public function create(string $userid, string $useridNormalized, ?string $email, ?string $emailNormalized, string $passwordHash, string $status, string $role = 'user'): array
+    public function create(string $userid, string $useridNormalized, ?string $email, ?string $emailNormalized, ?string $passwordHash, string $status, string $role = 'user'): array
     {
         $now = gmdate('Y-m-d H:i:s');
         $statement = $this->pdo->prepare(
             'INSERT INTO users (userid, userid_normalized, email, email_normalized, password_hash, status, role, email_verified_at, created_at, updated_at) '
             . 'VALUES (:userid, :userid_normalized, :email, :email_normalized, :password_hash, :status, :role, :verified_at, :created_at, :updated_at)'
         );
+        $standalone = !$this->pdo->inTransaction();
+        if ($standalone) $this->pdo->beginTransaction();
         try {
             $statement->execute([
                 ':userid' => $userid,
@@ -33,14 +36,61 @@ final class UserRepository implements UserRepositoryInterface
                 ':created_at' => $now,
                 ':updated_at' => $now,
             ]);
-        } catch (PDOException $error) {
-            if ((string)$error->getCode() === '23000') {
+            $id = (int)$this->pdo->lastInsertId();
+            $this->assertUseridAvailable($useridNormalized, $id);
+            $user = $this->findById($id) ?? throw new RuntimeException('Created user could not be loaded.');
+            if ($standalone) $this->pdo->commit();
+            return $user;
+        } catch (Throwable $error) {
+            if ($standalone && $this->pdo->inTransaction()) $this->pdo->rollBack();
+            if ($error instanceof PDOException && (string)$error->getCode() === '23000') {
                 throw new DuplicateIdentityException('User ID or email is already registered.', 0, $error);
             }
             throw $error;
         }
-        return $this->findById((int)$this->pdo->lastInsertId())
-            ?? throw new RuntimeException('Created user could not be loaded.');
+    }
+
+    /** Called inside a transaction so the rename and old public alias take effect together. */
+    public function renameUserid(array $account, string $userid, string $normalized): ?array
+    {
+        $id = (int)$account['id'];
+        $update = $this->pdo->prepare(
+            "UPDATE users SET userid = :userid, userid_normalized = :normalized, updated_at = :when
+             WHERE id = :id AND status = 'active' AND role = :role AND updated_at = :previous_update
+               AND BINARY userid = :previous_userid AND BINARY password_hash <=> :password_hash"
+        );
+        try {
+            $update->execute([
+                ':userid' => $userid, ':normalized' => $normalized, ':when' => gmdate('Y-m-d H:i:s'),
+                ':id' => $id, ':role' => $account['role'], ':previous_update' => $account['updated_at'],
+                ':previous_userid' => $account['userid'], ':password_hash' => $account['password_hash'],
+            ]);
+        } catch (PDOException $error) {
+            if ((string)$error->getCode() === '23000') {
+                throw new DuplicateIdentityException('User ID is already registered.', 0, $error);
+            }
+            throw $error;
+        }
+        if ($update->rowCount() !== 1) return null;
+        $this->assertUseridAvailable($normalized, $id);
+        if ($normalized !== (string)$account['userid_normalized']) {
+            $alias = $this->pdo->prepare(
+                'INSERT INTO userid_aliases (userid_normalized, user_id) VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE user_id = user_id'
+            );
+            $alias->execute([$account['userid_normalized'], $id]);
+        }
+        return $this->findById($id);
+    }
+
+    private function assertUseridAvailable(string $normalized, int $userId): void
+    {
+        $query = $this->pdo->prepare('SELECT user_id FROM userid_aliases WHERE userid_normalized = ? FOR UPDATE');
+        $query->execute([$normalized]);
+        $aliasOwner = $query->fetchColumn();
+        if ($aliasOwner !== false && (int)$aliasOwner !== $userId) {
+            throw new DuplicateIdentityException('User ID is reserved for another account.');
+        }
     }
 
     public function findById(int $id): ?array
@@ -120,6 +170,22 @@ final class UserRepository implements UserRepositoryInterface
     {
         $statement = $this->pdo->prepare('UPDATE users SET password_hash = :password_hash, updated_at = :updated_at WHERE id = :id');
         $statement->execute([':password_hash' => $passwordHash, ':updated_at' => gmdate('Y-m-d H:i:s'), ':id' => $id]);
+    }
+
+    /** Called inside the transaction that revokes pending password resets. */
+    public function updateConsolePassword(array $account, string $passwordHash): ?array
+    {
+        $statement = $this->pdo->prepare(
+            "UPDATE users SET password_hash = :password_hash, updated_at = :updated_at
+             WHERE id = :id AND status = 'active' AND role = :role AND updated_at = :previous_update
+               AND BINARY password_hash <=> :previous_hash"
+        );
+        $statement->execute([
+            ':password_hash' => $passwordHash, ':updated_at' => gmdate('Y-m-d H:i:s'),
+            ':id' => $account['id'], ':role' => $account['role'], ':previous_update' => $account['updated_at'],
+            ':previous_hash' => $account['password_hash'],
+        ]);
+        return $statement->rowCount() === 1 ? $this->findById((int)$account['id']) : null;
     }
 
     public function recordLogin(int $id): void

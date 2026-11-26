@@ -18,7 +18,7 @@ header("Content-Security-Policy: default-src 'none'; script-src 'self'; connect-
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OpenStreetMap | Community Map Maker</title>
-  <script src="../osm-callback.js?v=2" defer></script>
+  <script src="../osm-callback.js?v=3" defer></script>
 </head>
 <body>
   <main>

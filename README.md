@@ -17,7 +17,7 @@ Activityは1投稿をDBの1レコードに保存し、サイト固有項目を`d
 
 PHP 8.1以上、PDO MySQL、MySQL 8.0以上または互換DB、`mail()`から送信可能なSendmail環境、HTTPSが必要です。
 
-1. 新規DBには`schema.sql`を適用します。既存DBは未適用の`migrations/001_activity_core.sql`から`migrations/014_osm_identities.sql`までを番号順に適用します。
+1. 新規DBには`schema.sql`を適用します。既存DBは未適用の`migrations/001_activity_core.sql`から`migrations/017_optional_password.sql`までを番号順に適用します。
 2. `config/config.example.php`をWeb公開ディレクトリ外へコピーし、DB接続・許可Origin・メール送信者・確認URL・パスワード再設定URLを設定します。
 3. `CMM_AUTH_CONFIG`に実設定ファイルの絶対パス、`CMM_RATE_LIMIT_SECRET`に32文字以上のランダムな秘密値を設定します。
 4. 静的Projectは`activity.apps`に登録します。新規Projectは管理画面からDBへ作成できます。
@@ -48,9 +48,15 @@ community_mapmaker_backend/    # /home/ACCOUNT/ 配下の非公開リポジト�
 
 既存 DB に `migrations/014_osm_identities.sql` を適用し、非公開の `config/config.php` の `auth.osm_oauth` に `client_id`、`client_secret`、登録した `redirect_uri` を設定します。PHP の cURL 拡張が必要です。
 
-新規利用者はユーザー登録画面で公開用ユーザー ID と任意の参加先を選び、「OpenStreetMap で登録」を使えます。メールアドレスやパスワードの入力は不要です。OSM の認証後にアカウントを作成し、マイページへ移動します。参加先を選んだ場合は、公開中かつ募集中のプロジェクトに投稿者として参加します。新規登録の可否は従来と同じ `auth.registration_enabled` で管理します。
+新規利用者はユーザー登録画面の「OpenStreetMap で登録」を使えます。ユーザー ID・メールアドレス・パスワードの入力は不要です。OSM の認証後に公開用ユーザー ID を自動発行してアカウントを作成し、マイページへ移動します。参加先を選んだ場合は、公開中かつ募集中のプロジェクトに投稿者として参加します。新規登録の可否は従来と同じ `auth.registration_enabled` で管理します。
 
 既存利用者は ID・パスワードでログインし、マイページから OSM アカウントを連携できます。登録・連携後は管理画面の「OpenStreetMap でログイン」を使えます。照合には OSM の固有ユーザー ID を使います。OSM だけで登録したアカウントの削除は、アカウント削除画面の問い合わせ先で受け付けます。
+
+メールで新規登録した利用者は、確認済みのメールアドレスとパスワードでログインします。公開用ユーザー ID は自動発行し、メールアドレスは非公開で管理します。
+
+ログイン中はマイページで公開用ユーザー ID を変更できます。ID でログインするときは新しい ID を使います。以前の ID は公開リンクと Activity API の作成者検索で同じアカウントに解決されます。OSM 表示名は OSM 認証時に同期します。
+
+管理画面では「OpenStreetMap でログイン」を先に表示します。ID・パスワードでログインする場合は「その他のログイン方法」を開きます。OSM で新規登録したアカウントは、マイページでログイン用パスワードを設定すると、どちらの方法でもログインできます。マイページでの設定には OSM ログイン済みのセッション、または現在のパスワードが必要です。
 
 ### Activity設定
 
@@ -128,7 +134,7 @@ curl --get 'http://127.0.0.1:18080/api/activities.php' \
   --data-urlencode 'filter%5Bstatus%5D=open'
 ```
 
-Activityの応答には、最終編集者のログイン用ユーザーIDを`updated_by_userid`として返します。通常取得・`summary=1`・CSVに共通で、編集者が未記録またはユーザーが削除済みの場合は`null`（CSVでは空欄）です。詳しくは[応答フィールド](docs/api-reference.md#activityの応答フィールド)を参照してください。
+Activityの応答には、最終編集者の公開用ユーザーIDを`updated_by_userid`として返します。通常取得・`summary=1`・CSVに共通で、編集者が未記録またはユーザーが削除済みの場合は`null`（CSVでは空欄）です。JSON では OSM 表示名も `updated_by_osm_display_name` で返します。表示名は OSM 認証時に同期し、未取得の場合は `null` です。詳しくは[応答フィールド](docs/api-reference.md#activityの応答フィールド)を参照してください。
 
 [API一覧](docs/api-reference.md#エンドポイント一覧)から、Activity、Project、ユーザー管理、認証の各仕様へ移動できます。
 

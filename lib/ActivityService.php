@@ -10,7 +10,7 @@ final class ActivityService
 {
     private const RESERVED = [
         'app' => true, 'app_key' => true, 'id' => true, 'activity_key' => true,
-        'is_deleted' => true, 'deleted_at' => true, 'updated_by_userid' => true,
+        'is_deleted' => true, 'deleted_at' => true, 'updated_by_userid' => true, 'updated_by_osm_display_name' => true,
         'latitude' => true, 'longitude' => true,
         'form_key' => true, 'osmid' => true, 'created_at' => true, 'updated_at' => true,
     ];
@@ -134,7 +134,7 @@ final class ActivityService
         return array_map(function (array $row) use ($options): array {
             $flat = $this->flatten($row);
             return ($options['summary'] ?? false)
-                ? array_intersect_key($flat, array_flip(['id', 'osmid', 'created_at', 'updated_at', 'latitude', 'longitude', 'form_key', 'name', 'updated_by_userid']))
+                ? array_intersect_key($flat, array_flip(['id', 'osmid', 'created_at', 'updated_at', 'latitude', 'longitude', 'form_key', 'name', 'updated_by_userid', 'updated_by_osm_display_name']))
                 : $flat;
         }, $rows);
     }
@@ -441,6 +441,7 @@ final class ActivityService
             'created_at' => (string)$row['created_at'],
             'updated_at' => (string)$row['updated_at'],
             'updated_by_userid' => isset($row['updated_by_userid']) ? (string)$row['updated_by_userid'] : null,
+            'updated_by_osm_display_name' => $row['updated_by_osm_display_name'] ?? null,
         ];
         if ($row['form_key'] !== null && $row['form_key'] !== '') $flat['form_key'] = (string)$row['form_key'];
         foreach ((array)$row['data'] as $key => $value) {

@@ -5,7 +5,7 @@ namespace CommunityMapMaker\Auth;
 
 interface UserRepositoryInterface
 {
-    public function create(string $userid, string $useridNormalized, ?string $email, ?string $emailNormalized, string $passwordHash, string $status, string $role = 'user'): array;
+    public function create(string $userid, string $useridNormalized, ?string $email, ?string $emailNormalized, ?string $passwordHash, string $status, string $role = 'user'): array;
     public function findById(int $id): ?array;
     public function findByIdentity(string $identityNormalized): ?array;
     /** @return list<string> */

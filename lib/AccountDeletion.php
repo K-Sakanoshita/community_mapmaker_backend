@@ -30,9 +30,10 @@ final class AccountDeletion
         $find->execute([':userid' => $normalized, ':email' => $normalized]);
         $authenticated = $find->fetch();
         // Verify before taking administrative locks, including a hash for unknown identities.
-        $hash = $authenticated === false ? '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.' : (string)$authenticated['password_hash'];
+        $storedHash = $authenticated['password_hash'] ?? null;
+        $hash = $storedHash ?? '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.';
         $valid = password_verify($password, $hash);
-        if (!$valid || $authenticated === false || $authenticated['status'] === 'deleted') throw new AccountCredentialsException();
+        if (!$valid || $storedHash === null || $authenticated['status'] === 'deleted') throw new AccountCredentialsException();
         $this->pdo->beginTransaction();
         try {
             // Use the same lock order as administrator role/status updates.
@@ -54,6 +55,7 @@ final class AccountDeletion
             $audit->execute([':target' => $id, ':actor' => $id]);
             // Remove identifiable rate-limit keys. Keep client-based abuse protection.
             $subjects = array_unique(array_filter([
+                'user:' . $id,
                 'userid:' . $user['userid_normalized'],
                 $user['email_normalized'] === null ? null : 'email:' . $user['email_normalized'],
                 'identity:' . $user['userid_normalized'],

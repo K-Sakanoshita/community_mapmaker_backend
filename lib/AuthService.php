@@ -30,8 +30,13 @@ final class AuthService
     {
         $this->assertRegistrationEnabled();
 
-        [$userid, $useridNormalized] = $this->validateUserid($input['userid'] ?? null);
+        $useridInput = $input['userid'] ?? null;
         [$email, $emailNormalized] = $this->validateEmail($input['email'] ?? null);
+        if ($useridInput === null && str_contains($email, ':')) {
+            // The sign-in form sends the email as the HTTP Basic username.
+            throw new ValidationException(['email' => 'A valid email address is required.']);
+        }
+        [$userid, $useridNormalized] = $this->validateUserid($useridInput ?? 'user-' . bin2hex(random_bytes(10)));
         $password = $this->validatePassword($input['password'] ?? null, $input['password_confirmation'] ?? null);
         $appKey = $this->registrationAppKey($input);
 
@@ -81,27 +86,23 @@ final class AuthService
         if (($input['privacy_acknowledged'] ?? null) !== true) {
             throw new ValidationException(['privacy_acknowledged' => 'Privacy acknowledgement is required.']);
         }
-        $userid = $input['userid'] ?? null;
-        [$userid] = $this->validateUserid(is_string($userid) ? $userid : '');
         $appKey = $this->registrationAppKey($input);
         $this->registrationProject($appKey);
-        return ['userid' => $userid, 'app_key' => $appKey, 'privacy_acknowledged' => true];
+        return ['app_key' => $appKey, 'privacy_acknowledged' => true];
     }
 
-    public function registerOsm(array $input, string $clientIdentifier, string $subject, OsmIdentityRepository $identities): array
+    public function registerOsm(array $input, string $clientIdentifier, array $profile, OsmIdentityRepository $identities): array
     {
         $input = $this->validateOsmRegistration($input);
-        [$userid, $useridNormalized] = $this->validateUserid($input['userid']);
         $appKey = $input['app_key'];
         $this->enforceLimit('register_client', 'client:' . $clientIdentifier);
-        $this->enforceLimit('register_userid', 'userid:' . $useridNormalized);
 
-        // The random credential is never shown or stored. OSM is the sign-in method.
-        $passwordHash = password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT);
-        $created = $this->transactions->run(function () use ($userid, $useridNormalized, $appKey, $passwordHash, $subject, $identities): array {
+        // The public attribution ID is independent of the private OSM subject.
+        $userid = 'osm-' . bin2hex(random_bytes(10));
+        $created = $this->transactions->run(function () use ($userid, $appKey, $profile, $identities): array {
             $project = $this->registrationProject($appKey);
-            $user = $this->users->create($userid, $useridNormalized, null, null, $passwordHash, 'active');
-            if (!$identities->link((int)$user['id'], $subject)) {
+            $user = $this->users->create($userid, $userid, null, null, null, 'active');
+            if (!$identities->link((int)$user['id'], $profile['subject'], $profile['display_name'])) {
                 throw new OsmIdentityAlreadyLinkedException();
             }
             if ($project !== null) {
@@ -314,6 +315,30 @@ final class AuthService
         });
     }
 
+    public function setConsolePassword(array $account, array $input, UserRepository $repository): ?array
+    {
+        $this->enforceDirectLimit('console_password_user', 'user:' . $account['id'], 10, 900);
+        if (($account['console_auth_method'] ?? '') !== 'osm') {
+            $current = $input['current_password'] ?? null;
+            if (!is_string($current) || strlen($current) > 4096 || $account['password_hash'] === null
+                || !password_verify($current, $account['password_hash'])) {
+                throw new ValidationException(['current_password' => 'Current password did not match.']);
+            }
+        }
+        $password = $input['password'] ?? null;
+        $confirmation = $input['password_confirmation'] ?? null;
+        $password = $this->validatePassword(is_string($password) ? $password : '', is_string($confirmation) ? $confirmation : '');
+        if (str_contains($password, "\0") || (PASSWORD_DEFAULT === PASSWORD_BCRYPT && strlen($password) > 72)) {
+            throw new ValidationException(['password' => 'Password must contain at most 72 bytes and no null bytes.']);
+        }
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        return $this->transactions->run(function () use ($repository, $account, $hash): ?array {
+            $updated = $repository->updateConsolePassword($account, $hash);
+            if ($updated !== null) $this->tokens->invalidate((int)$account['id'], self::RESET_PASSWORD);
+            return $updated;
+        });
+    }
+
     public function resendVerificationForUser(int $userId, string $clientIdentifier): array
     {
         $user = $this->users->findById($userId);
@@ -368,7 +393,7 @@ final class AuthService
         if ($user === null || (string)$user['status'] !== 'active') return null;
         if (!in_array($user['role'] ?? 'user', ['user', 'admin'], true)) return null;
         if ($normalized === (string)($user['email_normalized'] ?? '') && $user['email_verified_at'] === null) return null;
-        if (!password_verify($password, (string)$user['password_hash'])) return null;
+        if ($user['password_hash'] === null || !password_verify($password, (string)$user['password_hash'])) return null;
         $this->users->recordLogin((int)$user['id']);
         return [
             'id' => (int)$user['id'],
@@ -378,7 +403,7 @@ final class AuthService
         ];
     }
 
-    private function validateUserid(mixed $value): array
+    public function validateUserid(mixed $value): array
     {
         $userid = trim((string)$value);
         if (!preg_match('/\A[A-Za-z0-9][A-Za-z0-9_.-]{2,63}\z/', $userid)) {

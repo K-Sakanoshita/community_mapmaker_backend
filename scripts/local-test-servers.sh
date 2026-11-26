@@ -471,6 +471,27 @@ migrate_stack() {
 
     compose exec --no-TTY database \
         mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker < "$project_root/migrations/014_osm_identities.sql"
+
+    local osm_display_name_column_count
+    osm_display_name_column_count=$(compose exec --no-TTY database \
+        mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker --batch --skip-column-names \
+        --execute="SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'osm_identities' AND column_name = 'osm_display_name'")
+    if [[ "$osm_display_name_column_count" == '0' ]]; then
+        compose exec --no-TTY database \
+            mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker < "$project_root/migrations/015_osm_display_name.sql"
+    fi
+
+    compose exec --no-TTY database \
+        mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker < "$project_root/migrations/016_userid_aliases.sql"
+
+    local password_nullable
+    password_nullable=$(compose exec --no-TTY database \
+        mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker --batch --skip-column-names \
+        --execute="SELECT IS_NULLABLE FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'password_hash'")
+    if [[ "$password_nullable" == 'NO' ]]; then
+        compose exec --no-TTY database \
+            mariadb --user=cmm --password=cmm_local_test --database=community_mapmaker < "$project_root/migrations/017_optional_password.sql"
+    fi
 }
 
 seed_stack() {

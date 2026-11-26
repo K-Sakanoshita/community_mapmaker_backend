@@ -31,7 +31,7 @@ final class AdminMemoryUsers implements UserRepositoryInterface, AdminUserReposi
         return $this->create($userid, strtolower($userid), $email, strtolower($email), password_hash($password, PASSWORD_DEFAULT), $status, $role);
     }
 
-    public function create(string $userid, string $useridNormalized, ?string $email, ?string $emailNormalized, string $passwordHash, string $status, string $role = 'user'): array
+    public function create(string $userid, string $useridNormalized, ?string $email, ?string $emailNormalized, ?string $passwordHash, string $status, string $role = 'user'): array
     {
         foreach ($this->rows as $row) {
             if ($row['userid_normalized'] === $useridNormalized || ($emailNormalized !== null && $row['email_normalized'] === $emailNormalized)) throw new DuplicateIdentityException();

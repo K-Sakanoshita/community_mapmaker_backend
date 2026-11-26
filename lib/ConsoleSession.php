@@ -19,14 +19,14 @@ final class ConsoleSession
         if (!$started) throw new \RuntimeException('Console session storage is unavailable.');
     }
 
-    public static function establish(array $user): void
+    public static function establish(array $user, string $authMethod = 'password'): void
     {
         if (!in_array($user['role'] ?? 'user', ['user', 'admin'], true)) {
             throw new \RuntimeException('Console access is not permitted.');
         }
         self::start();
         if (!session_regenerate_id(true)) throw new \RuntimeException('Console session rotation failed.');
-        $_SESSION = ['user_id' => (int)$user['id'], 'password_stamp' => self::accountStamp($user)];
+        $_SESSION = ['user_id' => (int)$user['id'], 'password_stamp' => self::accountStamp($user), 'auth_method' => $authMethod];
         session_write_close();
     }
 
@@ -66,10 +66,12 @@ final class ConsoleSession
         self::start();
         $id = (int)($_SESSION['user_id'] ?? 0);
         $stamp = (string)($_SESSION['password_stamp'] ?? '');
+        $authMethod = ($_SESSION['auth_method'] ?? '') === 'osm' ? 'osm' : 'password';
         session_write_close();
         $user = $container['user_repo']->findById($id);
         if (!$user || $user['status'] !== 'active' || !hash_equals($stamp, self::accountStamp($user))) return null;
         if (!in_array($user['role'] ?? 'user', ['user', 'admin'], true)) return null;
+        $user['console_auth_method'] = $authMethod;
         return $user;
     }
 

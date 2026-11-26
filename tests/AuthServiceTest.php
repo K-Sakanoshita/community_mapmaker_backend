@@ -21,7 +21,7 @@ final class MemoryUsers implements UserRepositoryInterface
     public array $rows = [];
     private int $nextId = 1;
 
-    public function create(string $userid, string $useridNormalized, ?string $email, ?string $emailNormalized, string $passwordHash, string $status, string $role = 'user'): array
+    public function create(string $userid, string $useridNormalized, ?string $email, ?string $emailNormalized, ?string $passwordHash, string $status, string $role = 'user'): array
     {
         foreach ($this->rows as $row) {
             if ($row['userid_normalized'] === $useridNormalized || ($emailNormalized !== null && $row['email_normalized'] === $emailNormalized)) {

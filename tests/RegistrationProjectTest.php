@@ -42,13 +42,23 @@ foreach (['closed', 'private', 'disabled', 'deleted', 'missing', ['playgrounds']
 }
 $projectAuth->register($input, 'test-client');
 assertTrue(count($projectUsers->rows) === 3 && count($memberships->rows) === 2, 'Registration without a project must not assign one.');
-$osmInput = ['userid' => 'osm-user', 'app_key' => 'playgrounds', 'privacy_acknowledged' => true];
-assertTrue($projectAuth->validateOsmRegistration($osmInput) === $osmInput, 'OSM registration must accept an eligible project without email or password.');
+$osmInput = ['app_key' => 'playgrounds', 'privacy_acknowledged' => true];
+assertTrue($projectAuth->validateOsmRegistration($osmInput) === $osmInput, 'OSM registration must accept an eligible project without user ID, email or password.');
+assertTrue($projectAuth->validateOsmRegistration($osmInput + ['userid' => 'supplied']) === $osmInput, 'OSM registration ignores a supplied user ID from an older client.');
 assertThrows(fn() => $projectAuth->validateOsmRegistration(array_replace($osmInput, ['privacy_acknowledged' => false])), CommunityMapMaker\Auth\ValidationException::class, 'OSM registration must require acknowledgement.');
 foreach (['closed', 'private', 'disabled', 'deleted', 'missing'] as $key) {
     assertThrows(fn() => $projectAuth->validateOsmRegistration(array_replace($osmInput, ['app_key' => $key])), CommunityMapMaker\Auth\ValidationException::class, 'OSM registration must enforce project eligibility.');
 }
 assertTrue(count($projectUsers->rows) === 3 && count($memberships->rows) === 2, 'Starting OSM registration must wait for authentication before creating an account.');
+$emailOnly = $input;
+unset($emailOnly['userid']);
+$emailOnly['email'] = 'email-only@example.test';
+$projectAuth->register($emailOnly, 'test-client');
+$emailUser = $projectUsers->findByIdentity($emailOnly['email']);
+assertTrue(preg_match('/\Auser-[a-f0-9]{20}\z/', $emailUser['userid']) === 1, 'Email registration generates a separate public ID.');
+assertTrue($projectAuth->authenticate('EMAIL-ONLY@example.test', $emailOnly['password']) === null, 'Email sign-in requires verification.');
+$projectUsers->verifyEmail((int)$emailUser['id']);
+assertTrue($projectAuth->authenticate('EMAIL-ONLY@example.test', $emailOnly['password'])['userid'] === $emailUser['userid'], 'Verified email can sign in without entering the public ID.');
 echo "Registration project behavior: ok\n";
 
 require_once dirname(__DIR__) . '/lib/RegistrationProjects.php';

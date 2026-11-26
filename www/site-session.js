@@ -22,9 +22,11 @@
   const logout = header.querySelector('#logoutButton');
   const api = new URL('api/console-session.php', document.currentScript.src);
   const headers = { Accept: 'application/json', 'X-Console-Session': '1' };
+  let currentUser = null;
 
   function render(user) {
     const signedIn = typeof user?.userid === 'string' && user.userid !== '';
+    currentUser = signedIn ? user : null;
     login.hidden = signedIn;
     myPage.hidden = !signedIn;
     allUsers.hidden = !signedIn || user.role !== 'admin';
@@ -39,7 +41,7 @@
     window.dispatchEvent(new CustomEvent("site-session-change", { detail: { signedIn } }));
   }
 
-  window.SiteSessionHeader = { render };
+  window.SiteSessionHeader = { render, get user() { return currentUser; } };
   // The console restores its own session and retains its unsaved-change guard.
   if (header.dataset.sessionManaged === 'admin') return;
 

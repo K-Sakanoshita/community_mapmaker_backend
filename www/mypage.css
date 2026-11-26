@@ -6,6 +6,14 @@ h2 { margin: 0 0 12px; font-size: 1.25rem; }
 p { line-height: 1.7; }
 a { color: var(--cmm-accent); }
 .description, .project-note { color: var(--cmm-muted); }
+#useridSettings { margin-bottom: 32px; }
+.userid-fields { display: flex; align-items: stretch; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.userid-fields input { flex: 0 1 24rem; min-width: 0; padding: 10px 12px; border: 1px solid var(--cmm-border); border-radius: 6px; background: var(--cmm-surface); color: var(--cmm-text); font: inherit; }
+#passwordSettings { margin: 0 0 32px; }
+#passwordSettings summary { color: var(--cmm-accent); cursor: pointer; }
+#consolePasswordForm { max-width: 28rem; }
+#consolePasswordForm label { display: grid; gap: 6px; margin-bottom: 12px; }
+#consolePasswordForm input { width: 100%; padding: 10px 12px; border: 1px solid var(--cmm-border); border-radius: 6px; background: var(--cmm-surface); color: var(--cmm-text); font: inherit; }
 .my-projects { list-style: none; margin: 24px 0; padding: 0; display: grid; gap: 12px; }
 .my-project { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; padding: 24px; border: 1px solid var(--cmm-border-soft); background: var(--cmm-surface); border-radius: 12px; }
 .project-info { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
@@ -16,7 +24,7 @@ button, .button { display: inline-block; padding: 10px 16px; border: 1px solid v
 button:hover, .button:hover { background: var(--cmm-surface-soft); }
 button:disabled { color: var(--cmm-text-disabled); background: var(--cmm-surface-disabled); cursor: default; }
 .leave-button { border-color: var(--cmm-accent); color: var(--cmm-accent); }
-a:focus-visible, button:focus-visible { outline: 3px solid var(--cmm-accent-hover); outline-offset: 3px; }
+a:focus-visible, button:focus-visible, .userid-fields input:focus-visible, #passwordSettings :is(summary, input):focus-visible { outline: 3px solid var(--cmm-accent-hover); outline-offset: 3px; }
 .pagination { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
 .error { color: var(--cmm-accent); }
 [hidden] { display: none !important; }

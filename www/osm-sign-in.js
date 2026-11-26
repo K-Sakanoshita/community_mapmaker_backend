@@ -6,6 +6,7 @@
   const action = panel.dataset.osmAction;
   const button = panel.querySelector('button');
   const status = panel.querySelector('[role="status"]');
+  const passwordMethods = action === 'login' ? document.getElementById('passwordLoginMethods') : null;
   const headers = { 'X-Console-Session': '1' };
 
   async function update() {
@@ -13,12 +14,15 @@
     try {
       const response = await fetch(endpoint, { headers });
       const result = await response.json();
-      if (!response.ok || !result.enabled || (action === 'link' && !result.signed_in)) return;
+      if (!response.ok || !result.enabled || (action === 'link' && !result.signed_in)) {
+        if (passwordMethods) passwordMethods.open = true;
+        return;
+      }
       button.hidden = action === 'link' && result.linked;
       status.textContent = action === 'link' && result.linked ? SiteLanguage.t('OpenStreetMap と連携済みです。') : '';
       panel.hidden = false;
     } catch {
-      // Password sign-in and My Page remain available when OSM status cannot be loaded.
+      if (passwordMethods) passwordMethods.open = true;
     }
   }
 

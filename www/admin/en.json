@@ -79,7 +79,7 @@
   "message.5953fca030e4": "Option values must be unique.",
   "message.598ab78312d8": "Project",
   "message.59d659673552": "Loading activity data...",
-  "message.5a5920b3fe2f": "Sign-in failed. Check your user ID and password. If your email is unverified, use the link in the verification email.",
+  "message.5a5920b3fe2f": "Sign-in failed. Check your email address or user ID and your password. If you have yet to verify your email, use the link in the verification email.",
   "message.5b2d4f518226": ")",
   "message.5b8068de67f5": "Owned projects",
   "message.5c846cc26118": "Email address saved, but the verification email could not be sent. Resend it from Email actions.",
